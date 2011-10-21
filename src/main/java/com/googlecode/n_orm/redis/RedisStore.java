@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.Tuple;
+
 import com.googlecode.n_orm.DatabaseNotReachedException;
 import com.googlecode.n_orm.storeapi.CloseableKeyIterator;
 import com.googlecode.n_orm.storeapi.Constraint;
@@ -27,6 +29,10 @@ public class RedisStore implements Store {
 	}
 	private static final String FAMILIES = "families";
 	
+	/**
+	 * Start the Jedis Instance
+	 * @throws DatabaseNotReachedException
+	 */
 	@Override
 	public void start() throws DatabaseNotReachedException {
 		this.redisInstance = new Jedis("localhost");
@@ -52,11 +58,32 @@ public class RedisStore implements Store {
 		return (this.redisInstance.exists(this.getKey(table, id, family, DataTypes.keys)));
 	}
 
+	/**
+	 * Get an iterator on a list of Row specified with a Constraint, and for a list of families
+	 * @param table 
+	 * @param c
+	 * @param limit
+	 * @param families
+	 * @return the iteator
+	 * @throws DatabaseNotReachedException
+	 */
 	@Override
 	public CloseableKeyIterator get(String table, Constraint c, int limit,
 			Set<String> families) throws DatabaseNotReachedException {
-		// TODO Auto-generated method stub
-		return null;
+		
+		double min = (c != null && c.getStartKey() != null) ? this.idToScore(c.getStartKey())	: Double.MIN_VALUE;
+		double max = (c != null && c.getEndKey() != null)   ? this.idToScore(c.getEndKey()) 	: Double.MAX_VALUE;
+		List<RowWrapper> rows = new ArrayList<RowWrapper>();
+		
+		Set<Tuple> redisResults = this.redisInstance.zrangeByScoreWithScores(this.getKey(table), min, max, 0, limit);
+		
+		for(Tuple redisResult : redisResults) {
+			rows.add(new RowWrapper(redisResult.getElement(), this.get(table, redisResult.getElement(), families)));
+			
+		}
+		
+		
+		return new CloseableIterator(rows);
 	}
 
 	/**
@@ -77,7 +104,7 @@ public class RedisStore implements Store {
 	}
 
 	/**
-	 * 
+	 * Get a Map of {key => value} for a specified id and a specified family
 	 * @param table
 	 * @param id
 	 * @param family
@@ -87,22 +114,56 @@ public class RedisStore implements Store {
 	@Override
 	public Map<String, byte[]> get(String table, String id, String family)
 			throws DatabaseNotReachedException {
-		Map<String, String> redisResult = this.redisInstance.hgetAll(this.getKey(table, id, family, DataTypes.vals));
-		Map<String, byte[]> result = new HashMap<String, byte[]>();
-		
-		// Convert String to byte[] for values
-		for (Map.Entry<String, String> e : redisResult.entrySet()) {
-			result.put(e.getKey(), this.decodeFromRedis(e.getValue()));
-		}
-		return result;
+		// get keys associated to the family <table>:<id>:<family>:keys
+		Set<String> familyKeys = this.redisInstance.zrangeByScore(this.getKey(table, id, family, DataTypes.keys), Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY);
+
+		return this.get(table, id, family, familyKeys.toArray(new String[0]));
 	}
 
+	/**
+	 * Get a Map of {key => value] with a specified table, id, family and set of keys
+	 * @param table
+	 * @param id
+	 * @param family
+	 * @param keys
+	 * @return
+	 */
+	public Map<String, byte[]> get(String table, String id, String family, String[] keys) {
+
+		Map<String, byte[]> familyResult = new HashMap<String, byte[]>();
+		
+		if(keys.length == 0)
+			return familyResult;
+		
+		List<String> familyRedisResult = this.redisInstance.hmget(this.getKey(table, id, family, DataTypes.vals), keys);
+		
+		// add and convert values from the family to a map
+		for(int i = 0; i < keys.length; i++) {
+			familyResult.put(keys[i], this.decodeFromRedis(familyRedisResult.get(i)));
+		}
+		return familyResult;
+	}
+
+	/**
+	 * Get a specified row from a specified table and family with rows specified with a Constraint
+	 * @param table
+	 * @param id
+	 * @param family
+	 * @param c
+	 * @return
+	 * @throws DatabaseNotReachedException
+	 */
 	@Override
 	public Map<String, byte[]> get(String table, String id, String family,
 			Constraint c) throws DatabaseNotReachedException {
-		// TODO Auto-generated method stub
 		// la contrainte porte sur les clés dans la famille
-		return null;
+		double min = (c != null && c.getStartKey() != null) ? this.idToScore(c.getStartKey())	: Double.MIN_VALUE;
+		double max = (c != null && c.getEndKey() != null)   ? this.idToScore(c.getEndKey()) 	: Double.MAX_VALUE;
+		Map<String, byte[]> result = new HashMap<String, byte[]>();
+		
+		Set<String> keys = this.redisInstance.zrangeByScore(this.getKey(table, id, family, DataTypes.keys), min, max);
+		
+		return this.get(table, id, family, keys.toArray(new String[0]));
 	}
 
 	/**
@@ -113,27 +174,27 @@ public class RedisStore implements Store {
 			Set<String> families) throws DatabaseNotReachedException {
 		
 		Map<String, Map<String, byte[]>> result = new HashMap<String, Map<String, byte[]>>();
-		Map<String, byte[]> familyResult;
-		String[] familyKeys;
-		List<String> familyRedisResult;
 		
 		// Iteration on families
 		for(String family : families ){
-			familyResult = new HashMap<String, byte[]>();
-			// get keys associated to the family <table>:<id>:<family>:keys
-			familyKeys = 		this.redisInstance.zrangeByScore(this.getKey(table, id, family, DataTypes.keys), Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY).toArray(new String[0]);
-			familyRedisResult = this.redisInstance.hmget(this.getKey(table, id, family, DataTypes.vals), familyKeys);
-			
-			// add and convert values from the family to a map
-			for(int i = 0; i < familyKeys.length; i++) {
-				familyResult.put(familyKeys[i], this.decodeFromRedis(familyRedisResult.get(i)));
-			}
-			result.put(family, familyResult);
+			result.put(family, this.get(table, id, family));
 		}
 		
 		return result;
 	}
 
+	/**
+	 * save changes in the database :
+	 *  - add or update the "changed" field
+	 *  - remove the "removed" fields
+	 *  - increments the Integer fields
+	 * @param table
+	 * @param id
+	 * @param changed
+	 * @param removed
+	 * @param increments
+	 * @throws DatabaseNotReachedException
+	 */
 	@Override
 	public void storeChanges(String table, String id,
 			Map<String, Map<String, byte[]>> changed,
@@ -178,23 +239,32 @@ public class RedisStore implements Store {
 			}
 		}
 		
+		double number;
 		if(increments != null) {
 			// Increment the values
 			for(Map.Entry<String, Map<String, Number>> family : increments.entrySet()) {
 				for(Entry<String, Number> familyKey : family.getValue().entrySet()) {
-					this.redisInstance.hincrBy( this.getKey(table, id, family.getKey(), DataTypes.vals), familyKey.getKey(), familyKey.getValue().longValue());
+					number = Double.parseDouble(new String(this.get(table, id, family.getKey(), familyKey.getKey())));
+					this.redisInstance.hset( this.getKey(table, id, family.getKey(), DataTypes.vals), familyKey.getKey(),
+							this.encodeToRedis(Double.toString((number+familyKey.getValue().doubleValue())).getBytes()));
 				}
 			}
 		}
 	}
 
+	/**
+	 * Delete a row from a table
+	 * @param table
+	 * @param id
+	 * @throws DatabaseNotReachedException
+	 */
 	@Override
 	public void delete(String table, String id)
 			throws DatabaseNotReachedException {
 		// delete :
 		// - <table>
 		List<String> keysToBeDeleted = new ArrayList<String>();
-		keysToBeDeleted.add(this.getKey(table));
+
 		keysToBeDeleted.add(this.getKey(table, id));
 		
 		Set<String> families = this.redisInstance.smembers(this.getKey(table, id));
@@ -209,6 +279,13 @@ public class RedisStore implements Store {
 		this.redisInstance.zrem(this.getKey(table), id);
 	}
 
+	/**
+	 * Return the number of the rows specified with a Constraint
+	 * @param table
+	 * @param c
+	 * @return
+	 * @throws DatabaseNotReachedException
+	 */
 	@Override
 	public long count(String table, Constraint c)
 			throws DatabaseNotReachedException {
@@ -255,7 +332,7 @@ public class RedisStore implements Store {
 		return table+SEPARATOR+id+SEPARATOR+FAMILIES+SEPARATOR+family+SEPARATOR+type.name();
 	}
 	
-	public double idToScore(String id) {
+	public double idToScore(String id) {		
 		byte[] byteId = id.getBytes();
 		double score = 0;
 		
@@ -263,15 +340,26 @@ public class RedisStore implements Store {
 			// Addition en commencant par le bit de poids ford et en décalant à droite
 			// en décimal de 2^8, taille d'un byte
 			score += (byteId[i] - Byte.MIN_VALUE) * Math.pow(2, 1000 - 8*i);
+
 		}
 		
 		return score;
 	}
 	
+	/**
+	 * Encode binary data to Base64 String
+	 * @param data
+	 * @return
+	 */
 	public String encodeToRedis(byte[] data) {
 		return Base64.encodeBase64String(data);
 	}
 	
+	/**
+	 * Decode Base64-encoded String to binary data  
+	 * @param data
+	 * @return
+	 */
 	public byte[] decodeFromRedis(String data) {
 		return Base64.decodeBase64(data);
 	}
