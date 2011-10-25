@@ -25,7 +25,10 @@ final class CloseableIterator implements CloseableKeyIterator {
 
 	@Override
 	public Row next() {
-		return iterator.next();
+		if(this.hasNext())
+			return iterator.next();
+		else
+			return null;
 	}
 
 	@Override

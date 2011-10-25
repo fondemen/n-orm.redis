@@ -14,6 +14,10 @@ import com.googlecode.n_orm.DatabaseNotReachedException;
 import com.googlecode.n_orm.storeapi.CloseableKeyIterator;
 import com.googlecode.n_orm.storeapi.Constraint;
 import com.googlecode.n_orm.storeapi.Store;
+
+import com.googlecode.n_orm.redis.RowWrapper;
+import com.googlecode.n_orm.redis.CloseableIterator;
+
 import org.apache.commons.codec.binary.Base64;
 
 // <table> -> liste ordonnée avec (poids-> id)
@@ -24,10 +28,15 @@ import org.apache.commons.codec.binary.Base64;
 public class RedisStore implements Store {
 	private Jedis redisInstance;
 	private static final String SEPARATOR = ":";
-	private static enum DataTypes {
+	public static enum DataTypes {
 		keys, vals
 	}
 	private static final String FAMILIES = "families";
+	
+	public static Store getStore() {
+		Store s = new RedisStore();
+		return s;
+	}
 	
 	/**
 	 * Start the Jedis Instance
@@ -117,7 +126,7 @@ public class RedisStore implements Store {
 		// get keys associated to the family <table>:<id>:<family>:keys
 		Set<String> familyKeys = this.redisInstance.zrangeByScore(this.getKey(table, id, family, DataTypes.keys), Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY);
 
-		return this.get(table, id, family, familyKeys.toArray(new String[0]));
+		return this.getWithKeys(table, id, family, familyKeys.toArray(new String[0]));
 	}
 
 	/**
@@ -128,7 +137,7 @@ public class RedisStore implements Store {
 	 * @param keys
 	 * @return
 	 */
-	public Map<String, byte[]> get(String table, String id, String family, String[] keys) {
+	public Map<String, byte[]> getWithKeys(String table, String id, String family, String[] keys) {
 
 		Map<String, byte[]> familyResult = new HashMap<String, byte[]>();
 		
@@ -163,7 +172,7 @@ public class RedisStore implements Store {
 		
 		Set<String> keys = this.redisInstance.zrangeByScore(this.getKey(table, id, family, DataTypes.keys), min, max);
 		
-		return this.get(table, id, family, keys.toArray(new String[0]));
+		return this.getWithKeys(table, id, family, keys.toArray(new String[0]));
 	}
 
 	/**

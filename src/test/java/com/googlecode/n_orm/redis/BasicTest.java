@@ -14,6 +14,7 @@ import org.junit.Test;
 
 import com.googlecode.n_orm.storeapi.CloseableKeyIterator;
 import com.googlecode.n_orm.storeapi.Constraint;
+import com.googlecode.n_orm.storeapi.Row;
 
 
 public class BasicTest {
@@ -147,7 +148,21 @@ public class BasicTest {
 		assertEquals("valeur", new String(it.next().getValues().get("family1").get("cle")));
 		
 		it = store.get(testTable, null, 50, families);
-		assertEquals("valeur", new String(it.next().getValues().get("family1").get("cle")));
+		Row row = it.next();
+		assertEquals("valeur", new String(row.getValues().get("family1").get("cle")));
+		assertEquals("123456", row.getKey());
+		while(it.hasNext())
+			it.next();
+		
+		assertNull(it.next());
+		
+		try {
+			it.remove();
+		} catch(IllegalStateException e) {
+			
+		}
+		it.close();
+
 	}
 	
 	@Test
@@ -180,8 +195,17 @@ public class BasicTest {
 	@Test
 	public void test40getWithConstraintOnKeys() {
 		assertEquals(4, store.get(testTable, "400000", "family1", new Constraint("a", "d")).size());
+		Constraint c = null;
+		assertEquals(4, store.get(testTable, "400000", "family1", c).size());
+
 		assertEquals(0, store.get(testTable, "400000", "family1", new Constraint("zz", "zzz")).size());
 		assertEquals("valeur21", new String(store.get(testTable, "400000", "family1", new Constraint("cle21", "d")).get("cle21")));
+	}
+	
+	@Test
+	public void test50Enum() {
+		RedisStore.DataTypes.valueOf(RedisStore.DataTypes.vals.toString());
+		RedisStore.DataTypes.valueOf(RedisStore.DataTypes.keys.toString());
 	}
 
 }
