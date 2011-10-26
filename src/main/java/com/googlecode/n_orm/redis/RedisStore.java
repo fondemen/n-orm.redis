@@ -32,10 +32,17 @@ public class RedisStore implements Store {
 		keys, vals
 	}
 	private static final String FAMILIES = "families";
+	protected static Store store;
 	
+	/**
+	 * Instanciate a unique RedisStore and return it
+	 * @return the RedisStore
+	 */
 	public static Store getStore() {
-		Store s = new RedisStore();
-		return s;
+		if(store == null) {
+			RedisStore.store = new RedisStore();
+		}
+		return store;
 	}
 	
 	/**
@@ -54,6 +61,7 @@ public class RedisStore implements Store {
 	@Override
 	public boolean exists(String table, String id)
 			throws DatabaseNotReachedException {
+		System.out.println("test existence of"+table+", "+id);
 		return (this.redisInstance.zscore(this.getKey(table), id) != null);
 	}
 
@@ -184,10 +192,19 @@ public class RedisStore implements Store {
 		
 		Map<String, Map<String, byte[]>> result = new HashMap<String, Map<String, byte[]>>();
 		
+		if(families == null)
+			return null;
+		
 		// Iteration on families
+		Map<String, byte[]> keys;
 		for(String family : families ){
-			result.put(family, this.get(table, id, family));
+			keys = this.get(table, id, family);
+			if(keys.size() > 0)
+				result.put(family, keys);
 		}
+		
+		if(result.size() == 0)
+			return null;
 		
 		return result;
 	}
@@ -253,7 +270,11 @@ public class RedisStore implements Store {
 			// Increment the values
 			for(Map.Entry<String, Map<String, Number>> family : increments.entrySet()) {
 				for(Entry<String, Number> familyKey : family.getValue().entrySet()) {
-					number = Double.parseDouble(new String(this.get(table, id, family.getKey(), familyKey.getKey())));
+					byte[] redisValue = this.get(table, id, family.getKey(), familyKey.getKey());
+					if(redisValue != null)
+						number = Double.parseDouble(new String(redisValue));
+					else
+						number = 0;
 					this.redisInstance.hset( this.getKey(table, id, family.getKey(), DataTypes.vals), familyKey.getKey(),
 							this.encodeToRedis(Double.toString((number+familyKey.getValue().doubleValue())).getBytes()));
 				}
