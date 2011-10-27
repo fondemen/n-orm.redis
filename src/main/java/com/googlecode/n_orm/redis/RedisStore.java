@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.TreeSet;
+
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Tuple;
 
@@ -29,7 +31,7 @@ public class RedisStore implements Store {
 	private Jedis redisInstance;
 	private static final String SEPARATOR = ":";
 	public static enum DataTypes {
-		keys, vals
+		keys, vals, increments
 	}
 	private static final String FAMILIES = "families";
 	protected static Store store;
@@ -88,17 +90,24 @@ public class RedisStore implements Store {
 	public CloseableKeyIterator get(String table, Constraint c, int limit,
 			Set<String> families) throws DatabaseNotReachedException {
 		
-		double min = (c != null && c.getStartKey() != null) ? this.idToScore(c.getStartKey())	: Double.MIN_VALUE;
-		double max = (c != null && c.getEndKey() != null)   ? this.idToScore(c.getEndKey()) 	: Double.MAX_VALUE;
+		int rangeMin = (c != null && c.getStartKey() != null) ? this.idToRank(table, c.getStartKey(), false)	: 0;
+		int rangeMax = (c != null && c.getEndKey() != null)   ? this.idToRank(table, c.getEndKey(), true)	 	: Integer.MAX_VALUE;
+		
+		// méthode pour chercher entre 2 clés :
+		// on insère les clés
+		// on demande le rang de chaque clé
+		// on récupère les résultats entre les 2 clés
+		
+		
 		List<RowWrapper> rows = new ArrayList<RowWrapper>();
 		
-		Set<Tuple> redisResults = this.redisInstance.zrangeByScoreWithScores(this.getKey(table), min, max, 0, limit);
+		Set<String> redisResults = this.getKeysBetween(this.getKey(table), rangeMin, rangeMax);
 		
-		for(Tuple redisResult : redisResults) {
-			rows.add(new RowWrapper(redisResult.getElement(), this.get(table, redisResult.getElement(), families)));
+		for(String redisResult : redisResults) {
+			rows.add(new RowWrapper(redisResult, this.get(table, redisResult, families)));
 			
 		}
-		
+		//System.out.println("Recherche entre "+min+" ("+c.getStartKey()+") et "+max+" ("+c.getEndKey()+")");
 		
 		return new CloseableIterator(rows);
 	}
@@ -117,7 +126,7 @@ public class RedisStore implements Store {
 	public byte[] get(String table, String id, String family, String key)
 			throws DatabaseNotReachedException {
 		String result = this.redisInstance.hget(this.getKey(table, id, family, DataTypes.vals), key);
-		return (result != null) ? this.decodeFromRedis(result) : null;
+		return (result != null) ? this.decodeFromRedis(table, id, family, result) : null;
 	}
 
 	/**
@@ -132,7 +141,7 @@ public class RedisStore implements Store {
 	public Map<String, byte[]> get(String table, String id, String family)
 			throws DatabaseNotReachedException {
 		// get keys associated to the family <table>:<id>:<family>:keys
-		Set<String> familyKeys = this.redisInstance.zrangeByScore(this.getKey(table, id, family, DataTypes.keys), Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY);
+		Set<String> familyKeys = this.getKeysBetween(this.getKey(table, id, family, DataTypes.keys), 0, 1);
 
 		return this.getWithKeys(table, id, family, familyKeys.toArray(new String[0]));
 	}
@@ -156,7 +165,7 @@ public class RedisStore implements Store {
 		
 		// add and convert values from the family to a map
 		for(int i = 0; i < keys.length; i++) {
-			familyResult.put(keys[i], this.decodeFromRedis(familyRedisResult.get(i)));
+			familyResult.put(keys[i], this.decodeFromRedis(table, id, family, familyRedisResult.get(i)));
 		}
 		return familyResult;
 	}
@@ -174,11 +183,10 @@ public class RedisStore implements Store {
 	public Map<String, byte[]> get(String table, String id, String family,
 			Constraint c) throws DatabaseNotReachedException {
 		// la contrainte porte sur les clés dans la famille
-		double min = (c != null && c.getStartKey() != null) ? this.idToScore(c.getStartKey())	: Double.MIN_VALUE;
-		double max = (c != null && c.getEndKey() != null)   ? this.idToScore(c.getEndKey()) 	: Double.MAX_VALUE;
-		Map<String, byte[]> result = new HashMap<String, byte[]>();
-		
-		Set<String> keys = this.redisInstance.zrangeByScore(this.getKey(table, id, family, DataTypes.keys), min, max);
+		int rangeMin = (c != null && c.getStartKey() != null) ? this.columnToRank(table, id, family, c.getStartKey(), false)	: 0;
+		int rangeMax = (c != null && c.getEndKey() != null)   ? this.columnToRank(table, id, family, c.getEndKey(), true) 	: Integer.MAX_VALUE;
+
+		Set<String> keys = this.getKeysBetween(this.getKey(table, id, family, DataTypes.keys), rangeMin, rangeMax);
 		
 		return this.getWithKeys(table, id, family, keys.toArray(new String[0]));
 	}
@@ -230,6 +238,10 @@ public class RedisStore implements Store {
 			throws DatabaseNotReachedException {
 		
 		if(changed != null) {
+			
+			// Add the key
+			this.redisInstance.zadd(this.getKey(table), this.idToScore(id), id);
+			
 			// Add changed rows for each families
 			for(Map.Entry<String, Map<String, byte[]>> family : changed.entrySet()) {
 				Map<String, String> dataToBeInserted = new HashMap<String, String>();
@@ -243,13 +255,12 @@ public class RedisStore implements Store {
 				
 				// add the set of keys
 				for(String redisKey : family.getValue().keySet()) {
-					this.redisInstance.zadd(this.getKey(table, id, family.getKey(), DataTypes.keys), this.idToScore(redisKey), redisKey);
+					this.redisInstance.zadd(this.getKey(table, id, family.getKey(), DataTypes.keys), this.columnToScore(redisKey), redisKey);
 				}
 				
 				// add the { key => value } hashmap
 				this.redisInstance.hmset(this.getKey(table, id, family.getKey(), DataTypes.vals), dataToBeInserted);
 				
-				this.redisInstance.zadd(this.getKey(table), this.idToScore(id), id);
 			}
 		}
 		
@@ -265,18 +276,33 @@ public class RedisStore implements Store {
 			}
 		}
 		
-		double number;
+		Integer number;
 		if(increments != null) {
 			// Increment the values
 			for(Map.Entry<String, Map<String, Number>> family : increments.entrySet()) {
+				
+				// if the family does not exist, create it
+				this.redisInstance.sadd(this.getKey(table, id), family.getKey());
+				
+				// Mark the family as "family increments"
+				this.redisInstance.set(this.getKey(table, id, family.getKey(), DataTypes.increments), "1");
+				
+				// add the set of keys
+				for(String redisKey : family.getValue().keySet()) {
+					this.redisInstance.zadd(this.getKey(table, id, family.getKey(), DataTypes.keys), this.columnToScore(redisKey), redisKey);
+				}
+				
 				for(Entry<String, Number> familyKey : family.getValue().entrySet()) {
 					byte[] redisValue = this.get(table, id, family.getKey(), familyKey.getKey());
 					if(redisValue != null)
-						number = Double.parseDouble(new String(redisValue));
-					else
+						number = (int) redisValue[0];
+					else {
+						// The value does not exist, but the family exists, suppose the value was 0
 						number = 0;
+					}
+					
 					this.redisInstance.hset( this.getKey(table, id, family.getKey(), DataTypes.vals), familyKey.getKey(),
-							this.encodeToRedis(Double.toString((number+familyKey.getValue().doubleValue())).getBytes()));
+							this.encodeToRedis(Integer.toString((number+familyKey.getValue().intValue())).getBytes()));
 				}
 			}
 		}
@@ -319,11 +345,11 @@ public class RedisStore implements Store {
 	@Override
 	public long count(String table, Constraint c)
 			throws DatabaseNotReachedException {
-
-		double min = (c != null && c.getStartKey() != null) ? this.idToScore(c.getStartKey())	: Double.MIN_VALUE;
-		double max = (c != null && c.getEndKey() != null)   ? this.idToScore(c.getEndKey()) 	: Double.MAX_VALUE;
 		
-		return this.redisInstance.zcount(this.getKey(table), min, max);
+		int rangeMin = (c != null && c.getStartKey() != null) ? this.idToRank(table, c.getStartKey(), false)	: 0;
+		int rangeMax = (c != null && c.getEndKey() != null)   ? this.idToRank(table, c.getEndKey(), true) 		: Integer.MAX_VALUE;
+		
+		return this.getKeysBetween(this.getKey(table), rangeMin, rangeMax).size();
 	}
 	
 	public void flushAll() {
@@ -362,18 +388,54 @@ public class RedisStore implements Store {
 		return table+SEPARATOR+id+SEPARATOR+FAMILIES+SEPARATOR+family+SEPARATOR+type.name();
 	}
 	
-	public double idToScore(String id) {		
-		byte[] byteId = id.getBytes();
-		double score = 0;
-		
-		for(int i = 0; i < byteId.length; i++) {
-			// Addition en commencant par le bit de poids ford et en décalant à droite
-			// en décimal de 2^8, taille d'un byte
-			score += (byteId[i] - Byte.MIN_VALUE) * Math.pow(2, 1000 - 8*i);
+	public double idToScore(String id) {
+		return 0;
+	}
+	
+	public double columnToScore(String id) {
+		return 0;
+	}
+	
+	/**
+	 * Return the rank of a id 
+	 * @param table
+	 * @param id
+	 * @return
+	 */
+	public int idToRank(String table, String id, Boolean endSearch) {
+		return this.redisKeyToRank(this.getKey(table), id, endSearch);
+	}
+	
+	/**
+	 * Return the rank of a column
+	 * @param table
+	 * @param id
+	 * @return
+	 */
+	public int columnToRank(String table, String id, String family, String key, Boolean endSearch) {
+		return this.redisKeyToRank(this.getKey(table, id, family, DataTypes.keys), key, endSearch);
+	}
+	
+	public int redisKeyToRank(String redisKey, String key, Boolean endSearch) {
+		// Remember if the key already exists
+		boolean alreadyExists = (this.redisInstance.zrank(redisKey, key) != null);
 
-		}
+		// Add the key and rememb
+		this.redisInstance.zadd(redisKey, 0, key);
 		
-		return score;
+		// get the rank of the freshly inserted id
+		Long rank = this.redisInstance.zrank(redisKey, key);
+		
+		// if the value do not already exists, remove 1 from the rank
+		// if we want the previous value (endSearch)
+		if(! alreadyExists && endSearch && (rank != 0))
+			rank--;
+		
+		// Remove the key if it was not already there
+		if(! alreadyExists)
+			this.redisInstance.zrem(redisKey, key);
+		
+		return rank.intValue();
 	}
 	
 	/**
@@ -382,7 +444,9 @@ public class RedisStore implements Store {
 	 * @return
 	 */
 	public String encodeToRedis(byte[] data) {
-		return Base64.encodeBase64String(data);
+		// FIXME : debug
+		return new String(data);
+		//return Base64.encodeBase64String(data);
 	}
 	
 	/**
@@ -390,8 +454,25 @@ public class RedisStore implements Store {
 	 * @param data
 	 * @return
 	 */
-	public byte[] decodeFromRedis(String data) {
-		return Base64.decodeBase64(data);
+	public byte[] decodeFromRedis(String table, String id, String family, String data) {
+		// FIXME : debug
+		
+		// Return the Integer directly into byte[]
+		if(this.redisInstance.get(this.getKey(table, id, family, DataTypes.increments)) != null ) {
+			System.out.println("Champ dans un increment ! "+table+":"+id+":"+family);
+			return new byte[] { new Integer(data).byteValue() };
+		}
+			
+		else
+			return data.getBytes();
+		//return Base64.decodeBase64(data);
 	}
-
+	
+	public Set<String> getKeysBetween(String key, int rangeMin, int rangeMax) {
+		if(rangeMax < rangeMin)
+			return new TreeSet<String>();
+		else
+			return this.redisInstance.zrangeByScore(key, rangeMin, rangeMax);
+	}
+	
 }
