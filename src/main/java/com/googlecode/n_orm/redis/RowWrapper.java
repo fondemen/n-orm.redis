@@ -1,7 +1,7 @@
 package com.googlecode.n_orm.redis;
 
+import java.util.HashMap;
 import java.util.Map;
-import java.util.TreeMap;
 
 import com.googlecode.n_orm.storeapi.Row;
 
@@ -11,6 +11,9 @@ public class RowWrapper implements Row {
 	
 	public RowWrapper(String id, Map<String, Map<String, byte[]>> val) {
 		this.key = id;
+		if(val == null)
+			val = new HashMap<String, Map<String,byte[]>>();
+		
 		this.values = val;
 	}
 	

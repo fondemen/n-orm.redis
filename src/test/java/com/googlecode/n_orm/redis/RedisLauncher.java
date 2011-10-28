@@ -11,8 +11,10 @@ public class RedisLauncher extends StoreTestLauncher {
 
 	@Override
 	public Properties prepare(Class<?> testClass) {
-//		Jedis jedis = new Jedis("localhost");
-//		jedis.flushAll();
+		Jedis jedis = new Jedis("localhost");
+		jedis.flushAll();
+		
+		System.out.println("Launching redis... "+testClass.getCanonicalName());
 		
 		Properties p = new Properties();
 		
