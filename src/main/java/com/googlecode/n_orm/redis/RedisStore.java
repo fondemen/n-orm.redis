@@ -39,6 +39,7 @@ public class RedisStore implements Store {
 	protected static Store store;
 	protected boolean isWriting = false;
 	protected Pipeline writingTransaction;
+	private Pipeline pipelineRedis;
 	
 	/**
 	 * Instanciate a unique RedisStore and return it
@@ -52,20 +53,25 @@ public class RedisStore implements Store {
 	}
 	
 	protected Jedis getReadableRedis() {
-		if(this.isWriting) {
-			this.writingTransaction.sync();
-			this.isWriting = false;
-		}
+//		if(this.isWriting) {
+//			this.writingTransaction.sync();
+//			this.isWriting = false;
+//		}
 		
 		return this.redisInstance;
 	}
-	
+	/*
 	protected Pipeline getWritableRedis() {
 		if(this.writingTransaction == null)
 			this.writingTransaction = this.redisInstance.pipelined();
 		
 		this.isWriting = true;
 		return this.writingTransaction;
+	}
+	*/
+	protected Jedis getWritableRedis() {
+
+		return this.redisInstance;
 	}
 	
 	/**
@@ -276,11 +282,12 @@ public class RedisStore implements Store {
 
 			throws DatabaseNotReachedException {
 		
+		pipelineRedis = this.redisInstance.pipelined();
 		
 		if(changed != null) {
 						
 			// Add the key
-			this.getWritableRedis().zadd(this.getKey(table), this.idToScore(id), id);
+			pipelineRedis.zadd(this.getKey(table), this.idToScore(id), id);
 			
 			// Add changed rows for each families
 			for(Map.Entry<String, Map<String, byte[]>> family : changed.entrySet()) {
@@ -291,15 +298,15 @@ public class RedisStore implements Store {
 					dataToBeInserted.put(key.getKey(), this.encodeToRedis(key.getValue()));
 				}
 				// add the family in the set of family
-				this.getWritableRedis().sadd(this.getKey(table, id), family.getKey());
+				pipelineRedis.sadd(this.getKey(table, id), family.getKey());
 				
 				// add the set of keys
 				for(String redisKey : family.getValue().keySet()) {
-					this.getWritableRedis().zadd(this.getKey(table, id, family.getKey(), DataTypes.keys), this.columnToScore(redisKey), redisKey);
+					pipelineRedis.zadd(this.getKey(table, id, family.getKey(), DataTypes.keys), this.columnToScore(redisKey), redisKey);
 				}
 				
 				// add the { key => value } hashmap
-				this.getWritableRedis().hmset(this.getKey(table, id, family.getKey(), DataTypes.vals), dataToBeInserted);
+				pipelineRedis.hmset(this.getKey(table, id, family.getKey(), DataTypes.vals), dataToBeInserted);
 				
 			}
 		}
@@ -309,9 +316,9 @@ public class RedisStore implements Store {
 			for(Entry<String, Set<String>> family : removed.entrySet()) {
 				for(String redisKey : family.getValue()) {
 					// remove from the list of keys...
-					this.getWritableRedis().zrem(this.getKey(table, id, family.getKey(), DataTypes.keys), redisKey);
+					pipelineRedis.zrem(this.getKey(table, id, family.getKey(), DataTypes.keys), redisKey);
 					// ... and from the hashmap
-					this.getWritableRedis().hdel(this.getKey(table, id, family.getKey(), DataTypes.vals), redisKey);
+					pipelineRedis.hdel(this.getKey(table, id, family.getKey(), DataTypes.vals), redisKey);
 				}
 			}
 		}
@@ -323,17 +330,20 @@ public class RedisStore implements Store {
 			for(Map.Entry<String, Map<String, Number>> family : increments.entrySet()) {
 				
 				// if the family does not exist, create it
-				this.getWritableRedis().sadd(this.getKey(table, id), family.getKey());
+				pipelineRedis.sadd(this.getKey(table, id), family.getKey());
 				
 				// Mark the family as "family increments"
-				this.getWritableRedis().set(this.getKey(table, id, family.getKey(), DataTypes.increments), "1");
+				pipelineRedis.set(this.getKey(table, id, family.getKey(), DataTypes.increments), "1");
 				
 				// add the set of keys
 				for(String redisKey : family.getValue().keySet()) {
-					this.getWritableRedis().zadd(this.getKey(table, id, family.getKey(), DataTypes.keys), this.columnToScore(redisKey), redisKey);
+					pipelineRedis.zadd(this.getKey(table, id, family.getKey(), DataTypes.keys), this.columnToScore(redisKey), redisKey);
 				}
 				
 				for(Entry<String, Number> familyKey : family.getValue().entrySet()) {
+					
+					// Need to sync before the read
+					pipelineRedis.sync();
 					byte[] redisValue = this.get(table, id, family.getKey(), familyKey.getKey());
 					if(redisValue != null)
 						number = (int) redisValue[0];
@@ -342,12 +352,12 @@ public class RedisStore implements Store {
 						number = 0;
 					}
 					
-					this.getWritableRedis().hset( this.getKey(table, id, family.getKey(), DataTypes.vals), familyKey.getKey(),
+					pipelineRedis.hset( this.getKey(table, id, family.getKey(), DataTypes.vals), familyKey.getKey(),
 							this.encodeToRedis(Integer.toString((number+familyKey.getValue().intValue())).getBytes()));
 				}
 			}
 		}
-		
+		pipelineRedis.sync();
 	}
 
 	/**
