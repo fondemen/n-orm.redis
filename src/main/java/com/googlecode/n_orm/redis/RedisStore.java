@@ -11,7 +11,6 @@ import java.util.TreeSet;
 
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Pipeline;
-import redis.clients.jedis.Transaction;
 import redis.clients.jedis.Tuple;
 
 import com.googlecode.n_orm.DatabaseNotReachedException;
@@ -19,6 +18,7 @@ import com.googlecode.n_orm.storeapi.CloseableKeyIterator;
 import com.googlecode.n_orm.storeapi.Constraint;
 import com.googlecode.n_orm.storeapi.Store;
 
+import com.googlecode.n_orm.conversion.ConversionTools;
 import com.googlecode.n_orm.redis.RowWrapper;
 import com.googlecode.n_orm.redis.CloseableIterator;
 
@@ -27,7 +27,8 @@ import org.apache.commons.codec.binary.Base64;
 // <table> -> liste ordonnée avec (poids-> id)
 // <table>:<id>:families -> un set de string
 // <table>:<id>:<column family>:keys -> un sorted set de string
-// <table>:<id>:<column family>:vals -> un hash de string -> string
+//<table>:<id>:<column family>:vals -> un hash de string -> string
+//<table>:<id>:<column family>:increments -> un hash de string -> string
 
 public class RedisStore implements Store {
 	private Jedis redisInstance;
@@ -39,7 +40,6 @@ public class RedisStore implements Store {
 	protected static Store store;
 	protected boolean isWriting = false;
 	protected Pipeline writingTransaction;
-	private Pipeline pipelineRedis;
 	
 	/**
 	 * Instanciate a unique RedisStore and return it
@@ -158,7 +158,7 @@ public class RedisStore implements Store {
 	public byte[] get(String table, String id, String family, String key)
 			throws DatabaseNotReachedException {
 		String result = this.getReadableRedis().hget(this.getKey(table, id, family, DataTypes.vals), key);
-		return (result != null) ? this.decodeFromRedis(table, id, family, result) : null;
+		return (result != null) ? this.decodeFromRedis(table, id, family, key, result) : null;
 	}
 
 	/**
@@ -197,7 +197,7 @@ public class RedisStore implements Store {
 		
 		// add and convert values from the family to a map
 		for(int i = 0; i < keys.length; i++) {
-			familyResult.put(keys[i], this.decodeFromRedis(table, id, family, familyRedisResult.get(i)));
+			familyResult.put(keys[i], this.decodeFromRedis(table, id, family, keys[i], familyRedisResult.get(i)));
 		}
 		return familyResult;
 	}
@@ -282,7 +282,8 @@ public class RedisStore implements Store {
 
 			throws DatabaseNotReachedException {
 		
-		pipelineRedis = this.redisInstance.pipelined();
+		//pipelineRedis = this.redisInstance.pipelined();
+		Jedis pipelineRedis = this.redisInstance;
 		
 		if(changed != null) {
 						
@@ -324,16 +325,16 @@ public class RedisStore implements Store {
 		}
 		
 
-		Integer number;
 		if(increments != null) {
 			// Increment the values
 			for(Map.Entry<String, Map<String, Number>> family : increments.entrySet()) {
 				
+				
+				// Add the key
+				pipelineRedis.zadd(this.getKey(table), this.idToScore(id), id);
+				
 				// if the family does not exist, create it
 				pipelineRedis.sadd(this.getKey(table, id), family.getKey());
-				
-				// Mark the family as "family increments"
-				pipelineRedis.set(this.getKey(table, id, family.getKey(), DataTypes.increments), "1");
 				
 				// add the set of keys
 				for(String redisKey : family.getValue().keySet()) {
@@ -341,23 +342,12 @@ public class RedisStore implements Store {
 				}
 				
 				for(Entry<String, Number> familyKey : family.getValue().entrySet()) {
-					
-					// Need to sync before the read
-					pipelineRedis.sync();
-					byte[] redisValue = this.get(table, id, family.getKey(), familyKey.getKey());
-					if(redisValue != null)
-						number = (int) redisValue[0];
-					else {
-						// The value does not exist, but the family exists, suppose the value was 0
-						number = 0;
-					}
-					
-					pipelineRedis.hset( this.getKey(table, id, family.getKey(), DataTypes.vals), familyKey.getKey(),
-							this.encodeToRedis(Integer.toString((number+familyKey.getValue().intValue())).getBytes()));
+					// Increment directly in the "increments" database
+					pipelineRedis.hincrBy( this.getKey(table, id, family.getKey(), DataTypes.increments), familyKey.getKey(), familyKey.getValue().longValue());
 				}
 			}
 		}
-		pipelineRedis.sync();
+		//pipelineRedis.sync();
 	}
 
 	/**
@@ -504,16 +494,21 @@ public class RedisStore implements Store {
 	 * @param data
 	 * @return
 	 */
-	public byte[] decodeFromRedis(String table, String id, String family, String data) {
-		byte[] decodedData = Base64.decodeBase64(data);
-		
-		// Return the Integer directly into byte[]
-		if(this.getReadableRedis().get(this.getKey(table, id, family, DataTypes.increments)) != null ) {
-			return new byte[] { new Integer(new String(decodedData)).byteValue() };
-		}
+	public byte[] decodeFromRedis(String table, String id, String family, String row, String data) {
+		byte[] decodedData;
+		// If the data is saved in the "vals" hash, decode frop base64
+		if(data != null && data.length() != 0)
+			decodedData = Base64.decodeBase64(data);
+		else { // The data is null, we search in the increment table
+			String incrementData = this.redisInstance.hget(this.getKey(table, id, family, DataTypes.increments), row);
+			if(incrementData != null && incrementData.length() != 0)
+				incrementData = "0";
 			
-		else
+			decodedData = ConversionTools.convert( Long.parseLong(incrementData) , Long.class);
+		}
+		if(decodedData != null)
 			return decodedData;
+		else return new byte[] {};
 	}
 
 }
