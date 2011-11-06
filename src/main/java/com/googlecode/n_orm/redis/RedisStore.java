@@ -528,10 +528,10 @@ public class RedisStore implements Store {
 
 	public int redisKeyToRank(String redisKey, String key, Boolean endSearch) {
 		// Remember if the key already exists
-		boolean alreadyExists = (this.getReadableRedis().zrank(redisKey, key) != null);
+		boolean alreadyExists = (this.redisInstance.zadd(redisKey, 0, key) == 0);
 
 		// Add the key and rememb
-		this.redisInstance.zadd(redisKey, 0, key);
+
 
 		// get the rank of the freshly inserted id
 		Long rank = this.getReadableRedis().zrank(redisKey, key);
