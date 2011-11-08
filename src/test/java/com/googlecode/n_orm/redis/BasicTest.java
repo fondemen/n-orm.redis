@@ -190,7 +190,7 @@ public class BasicTest {
 		toBeIncrementedKeys.put("cle-incr", 10);
 		toBeIncrementedKeysFamilies.put("family2", toBeIncrementedKeys);
 		store.storeChanges(testTable, "123456", null, null, toBeIncrementedKeysFamilies);
-		assertTrue(new Double(52).equals(Double.parseDouble(new String(store.get(testTable, "123456", "family2", "cle-incr")))));
+		assertEquals("52", new String(store.get(testTable, "123456", "family2", "cle-incr")));
 
 	}
 	

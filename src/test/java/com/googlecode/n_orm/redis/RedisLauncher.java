@@ -13,9 +13,7 @@ public class RedisLauncher extends StoreTestLauncher {
 	public Properties prepare(Class<?> testClass) {
 		//Jedis jedis = new Jedis("localhost");
 		//jedis.flushAll();
-				
-		System.out.println("Launching redis... "+testClass.getCanonicalName());
-		
+						
 		Properties p = new Properties();
 		
 		p.setProperty(StoreSelector.STORE_DRIVERCLASS_PROPERTY, com.googlecode.n_orm.redis.RedisStore.class.getName());
