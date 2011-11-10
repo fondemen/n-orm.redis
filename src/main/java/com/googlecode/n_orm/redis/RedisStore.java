@@ -31,7 +31,7 @@ import org.apache.commons.codec.binary.Base64;
 //<table>:<id>:<column family>:increments -> un hash de string -> string
 
 public class RedisStore implements Store {
-	private static Jedis redisInstance;
+	private Jedis redisInstance;
 	private static final String SEPARATOR = ":";
 
 	public static enum DataTypes {
@@ -49,10 +49,13 @@ public class RedisStore implements Store {
 	 * @return the RedisStore
 	 */
 	public static Store getStore() {
-		if (store == null) {
+		/*
+		
 			RedisStore.store = new RedisStore();
 		}
 		return store;
+		*/
+		return new RedisStore();
 	}
 
 	protected Jedis getReadableRedis() {
@@ -81,7 +84,7 @@ public class RedisStore implements Store {
 	 */
 	@Override
 	public void start() throws DatabaseNotReachedException {
-		if(RedisStore.redisInstance == null) {
+		if(this.redisInstance == null) {
 			this.redisInstance = new Jedis("localhost");
 			System.out.println("really start Jedis");
 		}
