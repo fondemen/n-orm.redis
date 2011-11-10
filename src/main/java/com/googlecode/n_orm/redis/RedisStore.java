@@ -9,7 +9,6 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeSet;
 
-import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Pipeline;
 import redis.clients.jedis.Tuple;
 
@@ -31,7 +30,7 @@ import org.apache.commons.codec.binary.Base64;
 //<table>:<id>:<column family>:increments -> un hash de string -> string
 
 public class RedisStore implements Store {
-	private Jedis redisInstance;
+	private static JedisProxy redisInstance;
 	private static final String SEPARATOR = ":";
 
 	public static enum DataTypes {
@@ -49,16 +48,13 @@ public class RedisStore implements Store {
 	 * @return the RedisStore
 	 */
 	public static Store getStore() {
-		/*
-		
+		if(RedisStore.store == null) {
 			RedisStore.store = new RedisStore();
 		}
 		return store;
-		*/
-		return new RedisStore();
 	}
 
-	protected Jedis getReadableRedis() {
+	protected JedisProxy getReadableRedis() {
 		// if(this.isWriting) {
 		// this.writingTransaction.sync();
 		// this.isWriting = false;
@@ -72,7 +68,7 @@ public class RedisStore implements Store {
 	 * 
 	 * this.isWriting = true; return this.writingTransaction; }
 	 */
-	protected Jedis getWritableRedis() {
+	protected JedisProxy getWritableRedis() {
 
 		return this.redisInstance;
 	}
@@ -85,11 +81,9 @@ public class RedisStore implements Store {
 	@Override
 	public void start() throws DatabaseNotReachedException {
 		if(this.redisInstance == null) {
-			this.redisInstance = new Jedis("localhost");
-			System.out.println("really start Jedis");
+			this.redisInstance = new JedisProxy();
+			System.out.println("really start proxyJedis");
 		}
-		else
-			System.out.println("(no)start Jedis");
 		
 	}
 

@@ -22,11 +22,24 @@ import redis.clients.jedis.ZParams;
 
 public class JedisProxyInstance implements JedisCommands {
 	private Jedis jedis;
+	
+	public JedisProxyInstance() {
+		jedis = new Jedis("localhost");
+	}
 
-	public void release() {
-		// TODO Auto-generated method stub
+	public void release(JedisProxy jedisProxy) {
+		jedisProxy.releaseInstance(this);
 		
 	}
+/*	
+	@Override
+	public boolean equals(Object eq) {
+		return true;
+	}
+*/	
+	/*
+	 * Below, the Jedis commands
+	 */
 	
 	public String ping() {
 		return jedis.ping();
@@ -744,10 +757,6 @@ public class JedisProxyInstance implements JedisCommands {
 
 	public byte[] brpoplpush(byte[] source, byte[] destination, int timeout) {
 		return jedis.brpoplpush(source, destination, timeout);
-	}
-
-	public boolean equals(Object obj) {
-		return jedis.equals(obj);
 	}
 
 	public Boolean exists(byte[] key) {
