@@ -1,7 +1,6 @@
 package com.googlecode.n_orm.redis;
 
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -10,7 +9,6 @@ import redis.clients.jedis.BinaryClient.LIST_POSITION;
 import redis.clients.jedis.BinaryJedisPubSub;
 import redis.clients.jedis.Client;
 import redis.clients.jedis.DebugParams;
-import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisCommands;
 import redis.clients.jedis.JedisMonitor;
 import redis.clients.jedis.JedisPubSub;
@@ -1316,13 +1314,6 @@ public class JedisProxy implements JedisCommands {
 	public byte[] brpoplpush(byte[] source, byte[] destination, int timeout) {
 		JedisProxyInstance aJedis = getAvailableJedis();
 		byte[] result = aJedis.brpoplpush(source, destination, timeout);
-		aJedis.release(JedisProxy.this);
-		return result;
-	}
-
-	public boolean equals(Object obj) {
-		JedisProxyInstance aJedis = getAvailableJedis();
-		boolean result = aJedis.equals(obj);
 		aJedis.release(JedisProxy.this);
 		return result;
 	}

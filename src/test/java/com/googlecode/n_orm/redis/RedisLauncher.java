@@ -2,8 +2,6 @@ package com.googlecode.n_orm.redis;
 
 import java.util.Properties;
 
-import redis.clients.jedis.Jedis;
-
 import com.googlecode.n_orm.StoreSelector;
 import com.googlecode.n_orm.StoreTestLauncher;
 

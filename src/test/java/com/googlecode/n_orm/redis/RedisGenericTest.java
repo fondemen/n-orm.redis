@@ -7,7 +7,6 @@ import org.junit.runners.Suite.SuiteClasses;
 
 import com.googlecode.n_orm.GenericTests;
 import com.googlecode.n_orm.StoreTestLauncher;
-import com.googlecode.n_orm.storeapi.Store;
 
 @RunWith(Suite.class)
 @SuiteClasses(GenericTests.class)

@@ -59,7 +59,7 @@ public class RedisStore implements Store {
 		// this.writingTransaction.sync();
 		// this.isWriting = false;
 		// }
-		return this.redisInstance;
+		return redisInstance;
 	}
 
 	/*
@@ -70,7 +70,7 @@ public class RedisStore implements Store {
 	 */
 	protected JedisProxy getWritableRedis() {
 
-		return this.redisInstance;
+		return redisInstance;
 	}
 
 	/**
@@ -80,8 +80,8 @@ public class RedisStore implements Store {
 	 */
 	@Override
 	public void start() throws DatabaseNotReachedException {
-		if(this.redisInstance == null) {
-			this.redisInstance = new JedisProxy();
+		if(redisInstance == null) {
+			redisInstance = new JedisProxy();
 			System.out.println("really start proxyJedis");
 		}
 		
@@ -314,93 +314,90 @@ public class RedisStore implements Store {
 			Map<String, Map<String, Number>> increments)
 
 	throws DatabaseNotReachedException {
-
-		synchronized (this.redisInstance) {
 				
-			// Parallelize the insert in the database
-			Pipeline pipelineRedis = this.redisInstance.pipelined();
-	
-			if (changed != null) {
-	
+		// Parallelize the insert in the database
+		Pipeline pipelineRedis = redisInstance.pipelined();
+
+		if (changed != null) {
+
+			// Add the key
+			pipelineRedis.zadd(this.getKey(table), this.idToScore(id), id);
+
+			// Add changed rows for each families
+			for (Map.Entry<String, Map<String, byte[]>> family : changed
+					.entrySet()) {
+				Map<String, String> dataToBeInserted = new HashMap<String, String>();
+
+				// Convert Map<String, byte[]> to Map<String, String> before
+				// inserting
+				for (Map.Entry<String, byte[]> key : family.getValue()
+						.entrySet()) {
+					dataToBeInserted.put(key.getKey(),
+							this.encodeToRedis(key.getValue()));
+				}
+				// add the family in the set of family
+				pipelineRedis.sadd(this.getKey(table, id), family.getKey());
+
+				// add the set of keys
+				for (String redisKey : family.getValue().keySet()) {
+					pipelineRedis.zadd(this.getKey(table, id, family.getKey(),
+							DataTypes.keys), this.columnToScore(redisKey),
+							redisKey);
+				}
+
+				// add the { key => value } hashmap
+				pipelineRedis
+						.hmset(this.getKey(table, id, family.getKey(),
+								DataTypes.vals), dataToBeInserted);
+
+			}
+		}
+
+		if (removed != null) {
+			// Remove the keys
+			for (Entry<String, Set<String>> family : removed.entrySet()) {
+				for (String redisKey : family.getValue()) {
+					// remove from the list of keys...
+					pipelineRedis.zrem(this.getKey(table, id, family.getKey(),
+							DataTypes.keys), redisKey);
+					// ... and from the hashmap
+					pipelineRedis.hdel(this.getKey(table, id, family.getKey(),
+							DataTypes.vals), redisKey);
+
+					pipelineRedis.hdel(this.getKey(table, id, family.getKey(),
+							DataTypes.increments), redisKey);
+				}
+			}
+		}
+
+		if (increments != null) {
+			// Increment the values
+			for (Map.Entry<String, Map<String, Number>> family : increments
+					.entrySet()) {
+
 				// Add the key
 				pipelineRedis.zadd(this.getKey(table), this.idToScore(id), id);
-	
-				// Add changed rows for each families
-				for (Map.Entry<String, Map<String, byte[]>> family : changed
+
+				// if the family does not exist, create it
+				pipelineRedis.sadd(this.getKey(table, id), family.getKey());
+
+				// add the set of keys
+				for (String redisKey : family.getValue().keySet()) {
+					pipelineRedis.zadd(this.getKey(table, id, family.getKey(),
+							DataTypes.keys), this.columnToScore(redisKey),
+							redisKey);
+				}
+
+				for (Entry<String, Number> familyKey : family.getValue()
 						.entrySet()) {
-					Map<String, String> dataToBeInserted = new HashMap<String, String>();
-	
-					// Convert Map<String, byte[]> to Map<String, String> before
-					// inserting
-					for (Map.Entry<String, byte[]> key : family.getValue()
-							.entrySet()) {
-						dataToBeInserted.put(key.getKey(),
-								this.encodeToRedis(key.getValue()));
-					}
-					// add the family in the set of family
-					pipelineRedis.sadd(this.getKey(table, id), family.getKey());
-	
-					// add the set of keys
-					for (String redisKey : family.getValue().keySet()) {
-						pipelineRedis.zadd(this.getKey(table, id, family.getKey(),
-								DataTypes.keys), this.columnToScore(redisKey),
-								redisKey);
-					}
-	
-					// add the { key => value } hashmap
-					pipelineRedis
-							.hmset(this.getKey(table, id, family.getKey(),
-									DataTypes.vals), dataToBeInserted);
-	
+					// Increment directly in the "increments" database
+					pipelineRedis.hincrBy(this.getKey(table, id,
+							family.getKey(), DataTypes.increments), familyKey
+							.getKey(), familyKey.getValue().longValue());
 				}
 			}
-	
-			if (removed != null) {
-				// Remove the keys
-				for (Entry<String, Set<String>> family : removed.entrySet()) {
-					for (String redisKey : family.getValue()) {
-						// remove from the list of keys...
-						pipelineRedis.zrem(this.getKey(table, id, family.getKey(),
-								DataTypes.keys), redisKey);
-						// ... and from the hashmap
-						pipelineRedis.hdel(this.getKey(table, id, family.getKey(),
-								DataTypes.vals), redisKey);
-	
-						pipelineRedis.hdel(this.getKey(table, id, family.getKey(),
-								DataTypes.increments), redisKey);
-					}
-				}
-			}
-	
-			if (increments != null) {
-				// Increment the values
-				for (Map.Entry<String, Map<String, Number>> family : increments
-						.entrySet()) {
-	
-					// Add the key
-					pipelineRedis.zadd(this.getKey(table), this.idToScore(id), id);
-	
-					// if the family does not exist, create it
-					pipelineRedis.sadd(this.getKey(table, id), family.getKey());
-	
-					// add the set of keys
-					for (String redisKey : family.getValue().keySet()) {
-						pipelineRedis.zadd(this.getKey(table, id, family.getKey(),
-								DataTypes.keys), this.columnToScore(redisKey),
-								redisKey);
-					}
-	
-					for (Entry<String, Number> familyKey : family.getValue()
-							.entrySet()) {
-						// Increment directly in the "increments" database
-						pipelineRedis.hincrBy(this.getKey(table, id,
-								family.getKey(), DataTypes.increments), familyKey
-								.getKey(), familyKey.getValue().longValue());
-					}
-				}
-			}
-			pipelineRedis.sync();
 		}
+		pipelineRedis.sync();
 	}
 
 	/**
@@ -430,9 +427,9 @@ public class RedisStore implements Store {
 			keysToBeDeleted.add(this.getKey(table, id, family,
 					DataTypes.increments));
 		}
-		this.redisInstance.del(keysToBeDeleted.toArray(new String[0]));
+		redisInstance.del(keysToBeDeleted.toArray(new String[0]));
 
-		this.redisInstance.zrem(this.getKey(table), id);
+		redisInstance.zrem(this.getKey(table), id);
 	}
 
 	/**
@@ -457,7 +454,7 @@ public class RedisStore implements Store {
 	}
 
 	public void flushAll() {
-		this.redisInstance.flushAll();
+		redisInstance.flushAll();
 	}
 
 	/**
@@ -532,7 +529,7 @@ public class RedisStore implements Store {
 
 	public int redisKeyToRank(String redisKey, String key, Boolean endSearch) {
 		// Remember if the key already exists
-		boolean alreadyExists = (this.redisInstance.zadd(redisKey, 0, key) == 0);
+		boolean alreadyExists = (redisInstance.zadd(redisKey, 0, key) == 0);
 
 		// Add the key and rememb
 
@@ -547,7 +544,7 @@ public class RedisStore implements Store {
 
 		// Remove the key if it was not already there
 		if (!alreadyExists)
-			this.redisInstance.zrem(redisKey, key);
+			redisInstance.zrem(redisKey, key);
 
 		return rank.intValue();
 	}
@@ -575,7 +572,7 @@ public class RedisStore implements Store {
 		if (data != null && data.length() != 0)
 			decodedData = Base64.decodeBase64(data);
 		else { // The data is null, we search in the increment table
-			String incrementData = this.redisInstance.hget(
+			String incrementData = redisInstance.hget(
 					this.getKey(table, id, family, DataTypes.increments), row);
 			if (incrementData == null || incrementData.length() == 0)
 				return new byte[] {};
