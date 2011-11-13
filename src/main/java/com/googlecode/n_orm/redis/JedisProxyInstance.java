@@ -24,11 +24,19 @@ public class JedisProxyInstance implements JedisCommands {
 	private Jedis jedis;
 	
 	public JedisProxyInstance() {
+		this.JPIstart();
+	}
+	
+	protected void JPIstart() {
 		jedis = new Jedis("localhost");
 	}
 
 	public void release(JedisProxy jedisProxy) {
-		jedisProxy.releaseInstance(this);
+		
+	}
+	
+	public void recycle() {
+		this.JPIstart();
 		
 	}
 /*	
@@ -1072,6 +1080,8 @@ public class JedisProxyInstance implements JedisCommands {
 	public Long zinterstore(byte[] dstkey, ZParams params, byte[]... sets) {
 		return jedis.zinterstore(dstkey, params, sets);
 	}
+
+
 
 
 
