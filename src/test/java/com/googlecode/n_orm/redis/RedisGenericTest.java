@@ -14,9 +14,9 @@ public class RedisGenericTest {
 
 	@BeforeClass public static void setupStore() {
 		
-		//Store rs = RedisStore.getStore();
-		//rs.start();
-		//((RedisStore) rs).flushAll();
+		RedisStore rs = (RedisStore) RedisStore.getStore();
+		rs.start();
+		//rs.flushAll();
 		
 		
 		StoreTestLauncher.INSTANCE = new RedisLauncher();

@@ -141,6 +141,7 @@ public class BasicTest {
 	}
 	
 	@Test
+	@Ignore
 	public void test15getIterator() {
 		Set<String> families = new HashSet<String>();
 		families.add("family1");
