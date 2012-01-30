@@ -2,10 +2,12 @@ package com.googlecode.n_orm.redis;
 
 import static org.junit.Assert.*;
 
+import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 
 import org.junit.BeforeClass;
@@ -28,6 +30,11 @@ public class BasicTest {
 		store.flushAll();
 	}
 
+	protected Map<String, Field> toNaiveMap(String field) {
+		Map<String, Field> ret = new TreeMap<String, Field>();
+		ret.put(field, null);
+		return ret;
+	}
 
 	@Test
 	public void test01InsertTable() {
@@ -44,32 +51,32 @@ public class BasicTest {
 		data.put("family1", dataFamily1);
 		data.put("family2", dataFamily2);
 		
-		store.storeChanges(testTable, "123456", data, null, null);
-		store.storeChanges(testTable, "123457", data, null, null);
-		store.storeChanges(testTable, "123458", data, null, null);
-		store.storeChanges(testTable, "300000", data, null, null);
-		store.storeChanges(testTable, "300010", data, null, null);
-		store.storeChanges(testTable, "400000", data, null, null);
+		store.storeChanges(null, null, testTable, "123456", data, null, null);
+		store.storeChanges(null, null, testTable, "123457", data, null, null);
+		store.storeChanges(null, null, testTable, "123458", data, null, null);
+		store.storeChanges(null, null, testTable, "300000", data, null, null);
+		store.storeChanges(null, null, testTable, "300010", data, null, null);
+		store.storeChanges(null, null, testTable, "400000", data, null, null);
 	}
 	
 	@Test
 	public void test02GetTableWithFamily() {
-		Map<String, byte[]> result = store.get(testTable, "123456", "family1");
+		Map<String, byte[]> result = store.get(null, null, testTable, "123456", "family1");
 		assertEquals("valeur", new String(result.get("cle")));
 	}
 	
 	@Test
 	public void test03GetTableWithFamilyAndKey() {
-		assertEquals("valeur", new String(store.get(testTable, "123456", "family1", "cle")));
-		assertSame(null, store.get(testTable, "123456", "family1", "not a key"));
-		assertSame(null, store.get(testTable, "123456", "not a real family", "not a key"));
+		assertEquals("valeur", new String(store.get(null, null, testTable, "123456", "family1", "cle")));
+		assertSame(null, store.get(null, null, testTable, "123456", "family1", "not a key"));
+		assertSame(null, store.get(null, null, testTable, "123456", "not a real family", "not a key"));
 	}
 	
 	@Test
 	public void test03Count() {
-		assertEquals(6,store.count(testTable, null));
-		assertEquals(1,store.count(testTable, new Constraint("400000", "400001")));
-		assertEquals(0,store.count(testTable, new Constraint("a", "b")));
+		assertEquals(6,store.count(null, testTable, null));
+		assertEquals(1,store.count(null, testTable, new Constraint("400000", "400001")));
+		assertEquals(0,store.count(null, testTable, new Constraint("a", "b")));
 	}
 
 	
@@ -100,18 +107,18 @@ public class BasicTest {
 	
 	@Test
 	public void test05CountWithConstraint() {
-		assertEquals(3,store.count(testTable, new Constraint("123450", "123460")));
-		assertEquals(3,store.count(testTable, new Constraint("1", "2")));
-		assertEquals(0,store.count(testTable, new Constraint("a", "z")));
-		assertEquals(6,store.count(testTable, null));
+		assertEquals(3,store.count(null, testTable, new Constraint("123450", "123460")));
+		assertEquals(3,store.count(null, testTable, new Constraint("1", "2")));
+		assertEquals(0,store.count(null, testTable, new Constraint("a", "z")));
+		assertEquals(6,store.count(null, testTable, null));
 	}
 	
 	@Test
 	public void test07getTableWithSetFamilies() {
-		Set<String> families = new HashSet<String>();
-		families.add("family1");
-		families.add("family2");
-		Map<String, Map<String, byte[]>> result = store.get(testTable, "123456", families);
+		Map<String, Field> families = new TreeMap<String, Field>();
+		families.put("family1", null);
+		families.put("family2", null);
+		Map<String, Map<String, byte[]>> result = store.get(null, testTable, "123456", families);
 		
 		assertEquals("1", new String(result.get("family2").get("cle-fam2")));
 		assertFalse("not a valid value".equals(new String(result.get("family2").get("cle-fam2"))));
@@ -119,38 +126,38 @@ public class BasicTest {
 	
 	@Test
 	public void test08existsId() {
-		assertTrue(store.exists(testTable, "123456"));
-		assertFalse(store.exists(testTable, "no valid id"));
+		assertTrue(store.exists(null, testTable, "123456"));
+		assertFalse(store.exists(null, testTable, "no valid id"));
 	}
 	
 	@Test
 	public void test09existsIdWithFamily() {
-		assertTrue(store.exists(testTable, "123456", "family1"));
-		assertTrue(store.exists(testTable, "123456", "family2"));
-		assertFalse(store.exists(testTable, "not a valid id","family1"));
-		assertFalse(store.exists(testTable, "123456","not a valid family"));
+		assertTrue(store.exists(null, null, testTable, "123456", "family1"));
+		assertTrue(store.exists(null, null, testTable, "123456", "family2"));
+		assertFalse(store.exists(null, null, testTable, "not a valid id","family1"));
+		assertFalse(store.exists(null, null, testTable, "123456","not a valid family"));
 	}
 	
 	@Test
 	public void test10delete() {
-		assertTrue(store.exists(testTable, "300000"));
-		assertTrue(store.exists(testTable, "300000", "family1"));
-		store.delete(testTable, "300000");
-		assertFalse(store.exists(testTable, "300000"));
-		assertFalse(store.exists(testTable, "300000", "family1"));
+		assertTrue(store.exists(null, testTable, "300000"));
+		assertTrue(store.exists(null, null, testTable, "300000", "family1"));
+		store.delete(null, testTable, "300000");
+		assertFalse(store.exists(null, testTable, "300000"));
+		assertFalse(store.exists(null, null, testTable, "300000", "family1"));
 	}
 	
 	@Test
 	@Ignore
 	public void test15getIterator() {
-		Set<String> families = new HashSet<String>();
-		families.add("family1");
-		families.add("family2");
+		Map<String, Field> families = new TreeMap<String, Field>();
+		families.put("family1", null);
+		families.put("family2", null);
 		
-		CloseableKeyIterator it = store.get(testTable, new Constraint("400000", "400001"), 50, families);
+		CloseableKeyIterator it = store.get(null, testTable, new Constraint("400000", "400001"), 50, families);
 		assertEquals("valeur", new String(it.next().getValues().get("family1").get("cle")));
 		
-		it = store.get(testTable, null, 50, families);
+		it = store.get(null, testTable, null, 50, families);
 		Row row = it.next();
 		assertEquals("valeur", new String(row.getValues().get("family1").get("cle")));
 		assertEquals("123456", row.getKey());
@@ -170,40 +177,40 @@ public class BasicTest {
 	
 	@Test
 	public void test20removedKeys() {
-		assertEquals("valeur2", new String(store.get(testTable, "123456", "family1", "cle2")));
+		assertEquals("valeur2", new String(store.get(null, null, testTable, "123456", "family1", "cle2")));
 		Map<String, Set<String>> toBeDeletedKeysFamilies = new HashMap<String, Set<String>>();
 		
 		Set<String> toBeDeletedKeys = new TreeSet<String>();
 		toBeDeletedKeys.add("cle2");
 		toBeDeletedKeysFamilies.put("family1", toBeDeletedKeys);
-		store.storeChanges(testTable, "123456", null, toBeDeletedKeysFamilies, null);
-		assertSame(null, store.get(testTable, "123456", "family1", "cle2"));
+		store.storeChanges(null, null, testTable, "123456", null, toBeDeletedKeysFamilies, null);
+		assertSame(null, store.get(null, null, testTable, "123456", "family1", "cle2"));
 
 	}
 	
 	@Test
 	@Ignore
 	public void test35increment() {
-		assertEquals("42", new String(store.get(testTable, "123456", "family2", "cle-incr")));
+		assertEquals("42", new String(store.get(null, null, testTable, "123456", "family2", "cle-incr")));
 		Map<String, Map<String, Number>> toBeIncrementedKeysFamilies = new HashMap<String, Map<String, Number>>();
 		
 		Map<String, Number> toBeIncrementedKeys = new HashMap<String, Number>();
 		
 		toBeIncrementedKeys.put("cle-incr", 10);
 		toBeIncrementedKeysFamilies.put("family2", toBeIncrementedKeys);
-		store.storeChanges(testTable, "123456", null, null, toBeIncrementedKeysFamilies);
-		assertEquals("52", new String(store.get(testTable, "123456", "family2", "cle-incr")));
+		store.storeChanges(null, null, testTable, "123456", null, null, toBeIncrementedKeysFamilies);
+		assertEquals("52", new String(store.get(null, null, testTable, "123456", "family2", "cle-incr")));
 
 	}
 	
 	@Test
 	public void test40getWithConstraintOnKeys() {
-		assertEquals(4, store.get(testTable, "400000", "family1", new Constraint("a", "d")).size());
+		assertEquals(4, store.get(null, null, testTable, "400000", "family1", new Constraint("a", "d")).size());
 		Constraint c = null;
-		assertEquals(4, store.get(testTable, "400000", "family1", c).size());
+		assertEquals(4, store.get(null, null, testTable, "400000", "family1", c).size());
 
-		assertEquals(0, store.get(testTable, "400000", "family1", new Constraint("zz", "zzz")).size());
-		assertEquals("valeur21", new String(store.get(testTable, "400000", "family1", new Constraint("cle21", "d")).get("cle21")));
+		assertEquals(0, store.get(null, null, testTable, "400000", "family1", new Constraint("zz", "zzz")).size());
+		assertEquals("valeur21", new String(store.get(null, null, testTable, "400000", "family1", new Constraint("cle21", "d")).get("cle21")));
 	}
 	
 	@Test

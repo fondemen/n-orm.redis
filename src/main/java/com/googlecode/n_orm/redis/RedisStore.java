@@ -1,5 +1,6 @@
 package com.googlecode.n_orm.redis;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 
 //import java.util.Calendar;
@@ -19,6 +20,7 @@ import redis.clients.jedis.Pipeline;
 
 import com.googlecode.n_orm.DatabaseNotReachedException;
 import com.googlecode.n_orm.EmptyCloseableIterator;
+import com.googlecode.n_orm.PersistingElement;
 import com.googlecode.n_orm.storeapi.CloseableKeyIterator;
 import com.googlecode.n_orm.storeapi.Constraint;
 import com.googlecode.n_orm.storeapi.Row;
@@ -122,7 +124,7 @@ public class RedisStore implements Store {
 	 * <table>
 	 */
 	@Override
-	public boolean exists(String table, String id)
+	public boolean exists(PersistingElement elt, String table, String id)
 			throws DatabaseNotReachedException {
 		return (this.getReadableRedis().zscore(this.getKey(table), id) != null);
 	}
@@ -135,7 +137,8 @@ public class RedisStore implements Store {
 	 * :<id>:<family>:keys exist
 	 */
 	@Override
-	public boolean exists(String table, String id, String family)
+	public boolean exists(PersistingElement elt, Field columnFamily,
+			String table, String id, String family)
 			throws DatabaseNotReachedException {
 		return (this.getReadableRedis().exists(this.getKey(table, id, family,
 				DataTypes.keys)));
@@ -153,8 +156,9 @@ public class RedisStore implements Store {
 	 * @throws DatabaseNotReachedException
 	 */
 	@Override
-	public CloseableKeyIterator get(String table, Constraint c, int limit,
-			Set<String> families) throws DatabaseNotReachedException {
+	public CloseableKeyIterator get(Class<? extends PersistingElement> type, 
+			String table, Constraint c, int limit,
+			Map<String, Field> families) throws DatabaseNotReachedException {
 
 		int rangeMin = (c != null && c.getStartKey() != null) ? this.idToRank(
 				table, c.getStartKey(), false) : DEFAULT_ID_SCORE;
@@ -189,7 +193,7 @@ public class RedisStore implements Store {
 			stopKey = stopKeys.iterator().next();
 
 
-		return new CloseableIterator(RedisStore.this, startKey, stopKey, table, limit, families);
+		return new CloseableIterator(RedisStore.this, type, startKey, stopKey, table, limit, families);
 	}
 
 	/**
@@ -204,7 +208,8 @@ public class RedisStore implements Store {
 	 * @throws DatabaseNotReachedException
 	 */
 	@Override
-	public byte[] get(String table, String id, String family, String key)
+	public byte[] get(PersistingElement elt, Field property,
+			String table, String id, String family, String key)
 			throws DatabaseNotReachedException {
 		String result = this.getReadableRedis().hget(
 				this.getKey(table, id, family, DataTypes.vals), key);
@@ -222,7 +227,8 @@ public class RedisStore implements Store {
 	 * @throws DatabaseNotReachedException
 	 */
 	@Override
-	public Map<String, byte[]> get(String table, String id, String family)
+	public Map<String, byte[]> get(PersistingElement elt, Field property,
+			String table, String id, String family)
 			throws DatabaseNotReachedException {
 		// get keys associated to the family <table>:<id>:<family>:keys
 		Set<String> familyKeys = this.getReadableRedis().zrangeByScore(
@@ -274,7 +280,8 @@ public class RedisStore implements Store {
 	 * @throws DatabaseNotReachedException
 	 */
 	@Override
-	public Map<String, byte[]> get(String table, String id, String family,
+	public Map<String, byte[]> get(PersistingElement elt, Field property,
+			String table, String id, String family,
 			Constraint c) throws DatabaseNotReachedException {
 		// la contrainte porte sur les clés dans la famille
 		int rangeMin = (c != null && c.getStartKey() != null) ? this
@@ -294,19 +301,23 @@ public class RedisStore implements Store {
 	 * Returns all the values associated to the families for an specified id
 	 */
 	@Override
-	public Map<String, Map<String, byte[]>> get(String table, String id,
-			Set<String> families) throws DatabaseNotReachedException {
+	public Map<String, Map<String, byte[]>> get(PersistingElement elt, String table, String id,
+			Map<String, Field> columnFamilies) throws DatabaseNotReachedException {
 
 		Map<String, Map<String, byte[]>> result = new HashMap<String, Map<String, byte[]>>();
 
 		// If the family set is not, give all the families
-		if (families == null)
+		Set<String> families;
+		if (columnFamilies == null)
 			families = this.getFamilies(table, id);
+		else
+			families = columnFamilies.keySet();
 
 		// Iteration on families
 		Map<String, byte[]> keys;
 		for (String family : families) {
-			keys = this.get(table, id, family);
+			Field famField = columnFamilies == null ? null : columnFamilies.get(family);
+			keys = this.get(elt, famField, table, id, family);
 			if (keys.size() > 0)
 				result.put(family, keys);
 		}
@@ -325,7 +336,7 @@ public class RedisStore implements Store {
 	 * @param families2
 	 * @param maxBulk
 	 */
-	public List<Row> get(String table, String startKey, String stopKey, Set<String> families2,
+	public List<Row> get(String table, Class<? extends PersistingElement> type, String startKey, String stopKey, Map<String, Field> families2,
 			int maxBulk, boolean excludeFirstElement) {
 		List<Row> result = new ArrayList<Row>();
 		int delta = maxBulk;
@@ -353,7 +364,7 @@ public class RedisStore implements Store {
 		Set<String> redisKeys = this.getReadableRedis().zrange(this.getKey(table), firstRank, firstRank + delta - 1);
 		
 		for(String key : redisKeys) {
-			result.add(new RowWrapper(key, this.get(table, key, families2)));
+			result.add(new RowWrapper(key, this.get(/*com.googlecode.n_orm.KeyManagement.getInstance().createElement(type, key)*/ null, table, key, families2)));
 		}
 		return result;
 	}
@@ -383,7 +394,9 @@ public class RedisStore implements Store {
 	 * @throws DatabaseNotReachedException
 	 */
 	@Override
-	public void storeChanges(String table, String id,
+	public void storeChanges(PersistingElement elt,
+			Map<String, Field> changedFields, 
+			String table, String id,
 			Map<String, Map<String, byte[]>> changed,
 			Map<String, Set<String>> removed,
 			Map<String, Map<String, Number>> increments)
@@ -485,7 +498,7 @@ public class RedisStore implements Store {
 	 * @throws DatabaseNotReachedException
 	 */
 	@Override
-	public void delete(String table, String id)
+	public void delete(PersistingElement elt, String table, String id)
 			throws DatabaseNotReachedException {
 		// delete :
 		// - <table>
@@ -504,7 +517,7 @@ public class RedisStore implements Store {
 			keysToBeDeleted.add(this.getKey(table, id, family,
 					DataTypes.increments));
 		}
-		this.getWritableRedis().del(keysToBeDeleted.toArray(new String[0]));
+		this.getWritableRedis().del(keysToBeDeleted.toArray(new String[keysToBeDeleted.size()]));
 
 		this.getWritableRedis().zrem(this.getKey(table), id);
 	}
@@ -518,7 +531,7 @@ public class RedisStore implements Store {
 	 * @throws DatabaseNotReachedException
 	 */
 	@Override
-	public long count(String table, Constraint c)
+	public long count(Class<? extends PersistingElement> type, String table, Constraint c)
 			throws DatabaseNotReachedException {
 
 		int rangeMin = (c != null && c.getStartKey() != null) ? this.idToRank(

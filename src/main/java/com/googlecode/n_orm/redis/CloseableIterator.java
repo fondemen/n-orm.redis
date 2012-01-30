@@ -1,25 +1,32 @@
 package com.googlecode.n_orm.redis;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
+import com.googlecode.n_orm.PersistingElement;
 import com.googlecode.n_orm.storeapi.CloseableKeyIterator;
 import com.googlecode.n_orm.storeapi.Row;
 
 final class CloseableIterator implements CloseableKeyIterator {
 	private static final int MAX_BULK = 100;
-	String startKey, stopKey, table;
-	Set<String> families;
-	RedisStore store;
-	List<Row> currentRows;
-	Iterator<Row> currentIterator;
-	private int limit, count;
-	
-	public CloseableIterator(RedisStore store, String startKey, String stopKey, String table,
-			int limit, Set<String> families) {
+	private final Class<? extends PersistingElement> type;
+	private String startKey;
+	private final String stopKey, table;
+	private final Map<String, Field> families;
+	private final RedisStore store;
+	private List<Row> currentRows;
+	private Iterator<Row> currentIterator;
+	private final int limit;
+	private int count;
+
+	public CloseableIterator(RedisStore store,
+			Class<? extends PersistingElement> type, String startKey,
+			String stopKey, String table, int limit, Map<String, Field> families) {
 		this.store = store;
+		this.type = type;
 		this.startKey = startKey;
 		this.stopKey = stopKey;
 		this.table = table;
@@ -70,7 +77,7 @@ final class CloseableIterator implements CloseableKeyIterator {
 			return;
 		
 		List<Row> result;
-		result = store.get(table, startKey, stopKey, families, MAX_BULK, (count != 0));
+		result = store.get(table, type, startKey, stopKey, families, MAX_BULK, (count != 0));
 		this.currentRows = result;
 		this.currentIterator = currentRows.iterator();
 		
