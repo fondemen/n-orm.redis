@@ -31,6 +31,7 @@ aspect JedisAspectProxy {
 			currentJedis = RedisStore.pool.getResource();
 			try {
 				result = method.invoke(currentJedis, args);
+				RedisStore.pool.returnResource(currentJedis);
 			} catch (Exception e1) {
 				System.err.println("2nd Exception in RedisProxy, trace below, we abort");
 				RedisStore.pool.returnBrokenResource(currentJedis);
