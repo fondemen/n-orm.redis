@@ -3,12 +3,9 @@ package com.googlecode.n_orm.redis;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 
-//import java.util.Calendar;
-//import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-//import java.util.AbstractMap.SimpleEntry;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeSet;
@@ -20,12 +17,10 @@ import redis.clients.jedis.Pipeline;
 
 import com.googlecode.n_orm.DatabaseNotReachedException;
 import com.googlecode.n_orm.EmptyCloseableIterator;
-import com.googlecode.n_orm.PersistingElement;
 import com.googlecode.n_orm.storeapi.CloseableKeyIterator;
 import com.googlecode.n_orm.storeapi.Constraint;
 import com.googlecode.n_orm.storeapi.Row;
 import com.googlecode.n_orm.storeapi.SimpleStore;
-import com.googlecode.n_orm.storeapi.Store;
 
 import com.googlecode.n_orm.conversion.ConversionTools;
 import com.googlecode.n_orm.redis.RowWrapper;
@@ -57,26 +52,7 @@ public class RedisStore implements SimpleStore {
 	
 	public static JedisPool pool = new JedisPool(new JedisPoolConfig(), "localhost");
 	
-	
-	/**
-	 * get an available jedis instance from the available pool or create one if no one available
-	 * 
-	 * @return an available instance
-	 */
-/*	public Jedis getAvailableJedis() {
-		return pool.getResource();
-	}
-*/
-	/**
-	 * Put the instance into the available pool
-	 * 
-	 * @param jedisProxyInstance
-	 */
-	/*
-	public void releaseInstance(JedisProxy jedisPoolInstance) {
-		pool.returnResource();
-	}
-	*/
+
 	/**
 	 * Instanciate a unique RedisStore and return it
 	 * 
