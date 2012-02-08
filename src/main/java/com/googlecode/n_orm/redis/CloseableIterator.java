@@ -30,6 +30,9 @@ final class CloseableIterator implements CloseableKeyIterator {
 		this.currentRows = new ArrayList<Row>();
 		this.currentIterator = this.currentRows.iterator();
 		this.count = 0;
+		
+		// Force to load firsts elements
+		hasNext();
 	}
 
 	@Override

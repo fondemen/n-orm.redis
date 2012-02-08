@@ -6,7 +6,6 @@ public class JedisProxy extends Jedis {
 
 	public JedisProxy(String host) {
 		super(host);
-		// TODO Auto-generated constructor stub
 	}
 
 }
