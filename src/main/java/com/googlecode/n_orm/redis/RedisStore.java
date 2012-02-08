@@ -12,7 +12,6 @@ import java.util.TreeSet;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
-import redis.clients.jedis.Pipeline;
 
 import com.googlecode.n_orm.DatabaseNotReachedException;
 import com.googlecode.n_orm.EmptyCloseableIterator;
@@ -26,6 +25,7 @@ import com.googlecode.n_orm.redis.RowWrapper;
 import com.googlecode.n_orm.redis.CloseableIterator;
 
 import org.apache.commons.codec.binary.Base64;
+
 
 // <table> -> liste ordonnée avec (poids-> id)
 // <table>:<id>:families -> un set de string
@@ -45,39 +45,52 @@ public class RedisStore implements SimpleStore {
 	private static final int DEFAULT_COLUMN_SCORE = 0;
 	protected static SimpleStore store;
 	protected boolean isWriting = false;
-	protected Pipeline writingTransaction;
-	//private List<SimpleEntry<JedisProxy, Date>> availableJedis  = new ArrayList<SimpleEntry<JedisProxy, Date>>();
-	//private static Calendar calendar = Calendar.getInstance();
 	
-	public static JedisPool pool = new JedisPool(new JedisPoolConfig(), "localhost");
+	public static JedisPoolConfig poolConfig = new JedisPoolConfig();
+	public static JedisPool pool;
 	
-
 	/**
-	 * Instanciate a unique RedisStore and return it
+	 * Instantiate a unique RedisStore and return it
 	 * 
 	 * @return the RedisStore
 	 */
 	public static SimpleStore getStore() {
 		if(RedisStore.store == null) {
 			RedisStore.store = new RedisStore();
+			 pool = new JedisPool(poolConfig, "localhost");
+		}
+		return store;
+	}
+	
+	public static SimpleStore getStore(String host) {
+		if(RedisStore.store == null) {
+			RedisStore.store = new RedisStore();
+			 pool = new JedisPool(poolConfig, host);
+		}
+		return store;
+	}
+	
+	/**
+	 * Default port is 6379
+	 * Default timemout is 2000
+	 * @param host
+	 * @param port
+	 * @param timeout
+	 * @param password
+	 * @return
+	 */
+	public static SimpleStore getStore(String host, int port, int timeout, String password) {
+		if(RedisStore.store == null) {
+			RedisStore.store = new RedisStore();
+			 pool = new JedisPool(poolConfig, host, port, timeout, password);
 		}
 		return store;
 	}
 
 	public JedisProxy getReadableRedis() {
-		// if(this.isWriting) {
-		// this.writingTransaction.sync();
-		// this.isWriting = false;
-		// }
 		return fakeJedis;
 	}
 
-	/*
-	 * protected Pipeline getWritableRedis() { if(this.writingTransaction ==
-	 * null) this.writingTransaction = this.redisInstance.pipelined();
-	 * 
-	 * this.isWriting = true; return this.writingTransaction; }
-	 */
 	protected Jedis getWritableRedis() {
 		return fakeJedis;
 	}
