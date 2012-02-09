@@ -1,7 +1,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<parent>
-		<artifactId>parent</artifactId>
+		<artifactId>parent-aspect</artifactId>
 		<groupId>com.googlecode.n_orm</groupId>
 		<version>0.0.1-SNAPSHOT</version>
 	</parent>
@@ -9,7 +9,7 @@
 	<groupId>com.googlecode.n_orm</groupId>
 	<artifactId>redis</artifactId>
 	<name>Redis driver for n-orm</name>
-	<version>redis-${redis.version}-n-orm-${project.parent.version}</version>
+	<version>jedis-${jedis.version}-n-orm-${project.parent.version}</version>
 	<packaging>jar</packaging>
 
 	<scm>
@@ -21,7 +21,6 @@
 	<properties>
               <commons-codec.version>1.4</commons-codec.version>
               <jedis.version>2.0.0</jedis.version>
-              <redis.version>2.2</redis.version>
 	</properties>
 
 	<dependencies>

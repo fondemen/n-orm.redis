@@ -24,7 +24,7 @@ public class BasicTest {
 	
 	@BeforeClass
 	public static void prepareStore() {
-		store = new RedisStore();
+		store = (RedisStore) RedisStore.getStore();
 		store.start();
 		store.flushAll();
 	}
