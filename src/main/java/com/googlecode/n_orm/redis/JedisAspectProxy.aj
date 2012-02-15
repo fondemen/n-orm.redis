@@ -4,12 +4,13 @@ import org.aspectj.lang.reflect.MethodSignature;
 
 import redis.clients.jedis.Jedis;
 import com.googlecode.n_orm.redis.RedisStore;
+import com.googlecode.n_orm.storeapi.SimpleStore;
 
 aspect JedisAspectProxy {
 
-	
-	pointcut jedisCall(): call(* *..Jedis.*(..));
+	pointcut storeCall(SimpleStore store): call(* *..SimpleStore.*(..)) && target(store);
 
+	pointcut jedisCall(): call(* *..Jedis.*(..));
 	
 	Object around(Jedis jedis): jedisCall() && target(jedis) {
 		Jedis currentJedis = RedisStore.pool.getResource();
@@ -44,4 +45,67 @@ aspect JedisAspectProxy {
 		return result;
 	}
 
+	
+    //Object around(Bank bank): BankCheck(bank) && !within(BankTotalBalanceAspect);
+
+	
+	
+	Object around(SimpleStore store): storeCall(store) && !within(JedisAspectProxy) {
+		Object result;
+		System.err.println("<catch call "+thisJoinPointStaticPart.getSignature().getName());
+
+		for(StackTraceElement elt : Thread.currentThread().getStackTrace()) {
+			System.err.println(elt.getClassName());	
+		}
+		
+		if(RedisStore.countRead != 0 && RedisStore.countWrite != 0) {
+			System.err.println("Erreur, countRead non vide");
+			
+		}		
+		result = proceed(store);
+
+
+		System.out.println("  <stats lectures='"+RedisStore.countRead+"' \tecritures='"+RedisStore.countWrite+"' />\n");
+		System.err.println("</catch call "+thisJoinPointStaticPart.getSignature().getName());
+
+
+		return result;
+	}
+	
+	/*
+	before(): storeCall() && !within(JedisAspectProxy) {
+		MethodSignature sign = (MethodSignature)thisJoinPointStaticPart.getSignature();
+
+		try {
+			SimpleStore.class.getMethod(sign.getName(), sign.getParameterTypes());
+		} catch(Exception e) {
+			return;
+		}
+		System.out.println("<"+thisJoinPointStaticPart.getSignature().getName()+">");
+
+		if(RedisStore.countRead != 0 && RedisStore.countWrite != 0) {
+			System.err.println("Erreur, countRead non vide");
+			
+		}
+		// RedisStore.countWrite = 0;
+	}
+	
+	after(): storeCall() && !within(JedisAspectProxy) {
+		MethodSignature sign = (MethodSignature)thisJoinPointStaticPart.getSignature();
+		
+		try {
+			SimpleStore.class.getMethod(sign.getName(), sign.getParameterTypes());
+		} catch(Exception e) {
+			return;
+		}
+		
+		System.out.println("<stats lectures='"+RedisStore.countRead+"' \tecritures='"+RedisStore.countWrite+"' />\n");
+		System.out.print("</"+thisJoinPointStaticPart.getSignature().getName()+">");
+		
+		RedisStore.countRead = 0;
+		RedisStore.countWrite = 0;
+
+	}
+
+*/
 }

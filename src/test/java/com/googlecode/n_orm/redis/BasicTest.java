@@ -187,7 +187,7 @@ public class BasicTest {
 
 	}
 	
-	@Test
+	
 	@Ignore
 	public void test35increment() {
 		assertEquals("42", new String(store.get(testTable, "123456", "family2", "cle-incr")));

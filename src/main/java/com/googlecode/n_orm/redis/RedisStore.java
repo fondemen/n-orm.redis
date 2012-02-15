@@ -43,18 +43,20 @@ public class RedisStore implements SimpleStore {
 	private static final String FAMILIES = "families";
 	private static final int DEFAULT_ID_SCORE = 0;
 	private static final int DEFAULT_COLUMN_SCORE = 0;
-	protected static SimpleStore store;
+	protected static RedisStore store;
 	protected boolean isWriting = false;
 	
 	public static JedisPoolConfig poolConfig = new JedisPoolConfig();
 	public static JedisPool pool;
+	public static int countRead;
+	public static int countWrite;
 	
 	/**
 	 * Instantiate a unique RedisStore and return it
 	 * 
 	 * @return the RedisStore
 	 */
-	public static SimpleStore getStore() {
+	public static RedisStore getStore() {
 		if(RedisStore.store == null) {
 			RedisStore.store = new RedisStore();
 			 pool = new JedisPool(poolConfig, "localhost");
@@ -62,10 +64,18 @@ public class RedisStore implements SimpleStore {
 		return store;
 	}
 	
-	public static SimpleStore getStore(String host) {
+	public static RedisStore getStore(String host) {
 		if(RedisStore.store == null) {
 			RedisStore.store = new RedisStore();
 			 pool = new JedisPool(poolConfig, host);
+		}
+		return store;
+	}
+	
+	public static RedisStore getStore(String host, int port) {
+		if(RedisStore.store == null) {
+			RedisStore.store = new RedisStore();
+			 pool = new JedisPool(poolConfig, host, port);
 		}
 		return store;
 	}
@@ -79,7 +89,7 @@ public class RedisStore implements SimpleStore {
 	 * @param password
 	 * @return
 	 */
-	public static SimpleStore getStore(String host, int port, int timeout, String password) {
+	public static RedisStore getStore(String host, int port, int timeout, String password) {
 		if(RedisStore.store == null) {
 			RedisStore.store = new RedisStore();
 			 pool = new JedisPool(poolConfig, host, port, timeout, password);
@@ -88,10 +98,14 @@ public class RedisStore implements SimpleStore {
 	}
 
 	public JedisProxy getReadableRedis() {
+		countRead++;
+		System.out.println("Accès lecture "+countRead);
 		return fakeJedis;
 	}
 
 	protected Jedis getWritableRedis() {
+		countWrite++;
+		System.out.println("Accès écriture "+countWrite);
 		return fakeJedis;
 	}
 
@@ -375,16 +389,12 @@ public class RedisStore implements SimpleStore {
 			Map<String, Map<String, Number>> increments)
 
 	throws DatabaseNotReachedException {
-				
-		// Parallelize the insert in the database
-		// Pipeline pipelineRedis = this.getWritableRedis().pipelined();
-		Jedis pipelineRedis = this.getWritableRedis();
 		
 		if (changed != null) {
 
 			// Add the key
-			pipelineRedis.zadd(this.getKey(table), this.idToScore(id), id);
-			pipelineRedis.sadd(this.getKey(table, id),"");
+			this.getWritableRedis().zadd(this.getKey(table), this.idToScore(id), id);
+			this.getWritableRedis().sadd(this.getKey(table, id),"");
 					
 			// Add changed rows for each families
 			for (Map.Entry<String, Map<String, byte[]>> family : changed
@@ -399,17 +409,17 @@ public class RedisStore implements SimpleStore {
 							this.encodeToRedis(key.getValue()));
 				}
 				// add the family in the set of family
-				pipelineRedis.sadd(this.getKey(table, id), family.getKey());
+				this.getWritableRedis().sadd(this.getKey(table, id), family.getKey());
 
 				// add the set of keys
 				for (String redisKey : family.getValue().keySet()) {
-					pipelineRedis.zadd(this.getKey(table, id, family.getKey(),
+					this.getWritableRedis().zadd(this.getKey(table, id, family.getKey(),
 							DataTypes.keys), this.columnToScore(redisKey),
 							redisKey);
 				}
 
 				// add the { key => value } hashmap
-				pipelineRedis
+				this.getWritableRedis()
 						.hmset(this.getKey(table, id, family.getKey(),
 								DataTypes.vals), dataToBeInserted);
 
@@ -421,13 +431,13 @@ public class RedisStore implements SimpleStore {
 			for (Entry<String, Set<String>> family : removed.entrySet()) {
 				for (String redisKey : family.getValue()) {
 					// remove from the list of keys...
-					pipelineRedis.zrem(this.getKey(table, id, family.getKey(),
+					this.getWritableRedis().zrem(this.getKey(table, id, family.getKey(),
 							DataTypes.keys), redisKey);
 					// ... and from the hashmap
-					pipelineRedis.hdel(this.getKey(table, id, family.getKey(),
+					this.getWritableRedis().hdel(this.getKey(table, id, family.getKey(),
 							DataTypes.vals), redisKey);
 
-					pipelineRedis.hdel(this.getKey(table, id, family.getKey(),
+					this.getWritableRedis().hdel(this.getKey(table, id, family.getKey(),
 							DataTypes.increments), redisKey);
 				}
 			}
@@ -439,14 +449,14 @@ public class RedisStore implements SimpleStore {
 					.entrySet()) {
 
 				// Add the key
-				pipelineRedis.zadd(this.getKey(table), this.idToScore(id), id);
+				this.getWritableRedis().zadd(this.getKey(table), this.idToScore(id), id);
 
 				// if the family does not exist, create it
-				pipelineRedis.sadd(this.getKey(table, id), family.getKey());
+				this.getWritableRedis().sadd(this.getKey(table, id), family.getKey());
 
 				// add the set of keys
 				for (String redisKey : family.getValue().keySet()) {
-					pipelineRedis.zadd(this.getKey(table, id, family.getKey(),
+					this.getWritableRedis().zadd(this.getKey(table, id, family.getKey(),
 							DataTypes.keys), this.columnToScore(redisKey),
 							redisKey);
 				}
@@ -454,13 +464,12 @@ public class RedisStore implements SimpleStore {
 				for (Entry<String, Number> familyKey : family.getValue()
 						.entrySet()) {
 					// Increment directly in the "increments" database
-					pipelineRedis.hincrBy(this.getKey(table, id,
+					this.getWritableRedis().hincrBy(this.getKey(table, id,
 							family.getKey(), DataTypes.increments), familyKey
 							.getKey(), familyKey.getValue().longValue());
 				}
 			}
 		}
-		// pipelineRedis.sync();
 	}
 
 	/**
@@ -670,8 +679,6 @@ public class RedisStore implements SimpleStore {
 		else
 			return new byte[] {};
 	}
-
-
 
 
 
