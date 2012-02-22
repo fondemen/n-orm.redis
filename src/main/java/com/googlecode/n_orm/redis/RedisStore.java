@@ -482,8 +482,9 @@ public class RedisStore implements SimpleStore {
 					DataTypes.increments));
 		}
 		this.getWritableRedis().zrem(this.getKey(table), id);
-		this.getWritableRedis().del(
-				keysToBeDeleted.toArray(new String[keysToBeDeleted.size()]));
+		if (!keysToBeDeleted.isEmpty())
+			this.getWritableRedis().del(
+					keysToBeDeleted.toArray(new String[keysToBeDeleted.size()]));
 	}
 
 	/**
