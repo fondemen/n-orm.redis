@@ -1,7 +1,6 @@
 package com.googlecode.n_orm.redis;
 
 import java.util.ArrayList;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -9,27 +8,26 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeSet;
 
+import org.apache.commons.codec.binary.Base64;
+
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
+import redis.clients.jedis.Response;
+import redis.clients.jedis.Transaction;
 
 import com.googlecode.n_orm.DatabaseNotReachedException;
 import com.googlecode.n_orm.EmptyCloseableIterator;
+import com.googlecode.n_orm.conversion.ConversionTools;
 import com.googlecode.n_orm.storeapi.CloseableKeyIterator;
 import com.googlecode.n_orm.storeapi.Constraint;
 import com.googlecode.n_orm.storeapi.Row;
 import com.googlecode.n_orm.storeapi.SimpleStore;
 
-import com.googlecode.n_orm.conversion.ConversionTools;
-import com.googlecode.n_orm.redis.RowWrapper;
-import com.googlecode.n_orm.redis.CloseableIterator;
-
-import org.apache.commons.codec.binary.Base64;
-
 
 // <table> -> liste ordonnée avec (poids-> id)
 // <table>:<id>:families -> un set de string
-// <table>:<id>:<column family>:k = new Jedis("localhost")eys -> un sorted set de string
+// <table>:<id>:<column family>:keys -> un sorted set de string
 //<table>:<id>:<column family>:vals -> un hash de string -> string
 //<table>:<id>:<column family>:increments -> un hash de string -> string
 
@@ -624,19 +622,26 @@ public class RedisStore implements SimpleStore {
 			return rank.intValue();
 		} else {
 			// the keys does not exist
+			Transaction t = this.getWritableRedis().multi();
+			
 			// Add the key
-			this.getWritableRedis().zadd(hashKey, 0, id);
+			t.zadd(hashKey, 0, id);
 	
 			// get the rank of the freshly inserted id
-			Long rank = this.getReadableRedis().zrank(hashKey, id);
+			Response<Long> rankR = t.zrank(hashKey, id);
+	
+			// Remove the key
+			t.zrem(hashKey, id);
+			
+			//Doing transaction
+			List<Object> res = t.exec();
+			Long rank = rankR.get();
+			
 	
 			// if the value do not already exists, remove 1 from the rank
 			// if we want the previous value (endSearch)
 			if (endSearch)
 				rank--;
-	
-			// Remove the key
-			this.getWritableRedis().zrem(hashKey, id);
 	
 			return rank.intValue();
 		}
