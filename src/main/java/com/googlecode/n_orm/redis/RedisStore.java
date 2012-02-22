@@ -336,32 +336,6 @@ public class RedisStore implements SimpleStore {
 	}
 
 	/**
-	 * Get the element startKey and the maxBulk next elements
-	 * 
-	 * @param table
-	 * @param startKey
-	 * @param families2
-	 * @param maxBulk
-	 */
-	public List<Row> get(String table, String startKey, String stopKey,
-			Set<String> families2, int maxBulk, boolean excludeFirstElement) {
-		List<Row> result = new ArrayList<Row>(maxBulk);
-		
-		int firstRank = startKey == null ? 0 : this.idToRank(table, startKey, false);
-		if (excludeFirstElement)
-			firstRank++;
-
-		Set<String> redisKeys = this.getReadableRedis().zrange(
-				this.getKey(table), firstRank, firstRank + maxBulk);
-
-		for (String key : redisKeys) {
-			if (stopKey == null || stopKey.compareTo(key) > 0)
-				result.add(new RowWrapper(key, this.get(table, key, families2)));
-		}
-		return result;
-	}
-
-	/**
 	 * Return the list of the families associated to an id and a table
 	 * 
 	 * @param table

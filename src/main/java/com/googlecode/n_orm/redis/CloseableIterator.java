@@ -3,6 +3,7 @@ package com.googlecode.n_orm.redis;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Set;
 
 import com.googlecode.n_orm.storeapi.CloseableKeyIterator;
@@ -13,10 +14,10 @@ final class CloseableIterator implements CloseableKeyIterator {
 	private final String stopKey, table;
 	private final Set<String> families;
 	private final RedisStore store;
-	private List<Row> currentRows;
 	private Iterator<Row> currentIterator;
 	private final int limit;
 	private int count;
+	private boolean lastCall, done;
 
 	public CloseableIterator(RedisStore store, String startKey,
 			String stopKey, String table, int limit, Set<String> families) {
@@ -26,9 +27,10 @@ final class CloseableIterator implements CloseableKeyIterator {
 		this.table = table;
 		this.limit = limit;
 		this.families = families;
-		this.currentRows = new ArrayList<Row>();
-		this.currentIterator = this.currentRows.iterator();
+		this.currentIterator = null;
 		this.count = 0;
+		this.done = false;
+		this.lastCall = false;
 	}
 
 	@Override
@@ -37,22 +39,25 @@ final class CloseableIterator implements CloseableKeyIterator {
 
 	@Override
 	public boolean hasNext() {
-		if(count > limit)
+		if(count > limit || done)
 			return false;
 		
-		if(currentIterator.hasNext())
+		if(currentIterator != null && currentIterator.hasNext())
 			return true;
 		
 		this.loadNextElements();
-		return this.currentIterator.hasNext();
+		if (this.done)
+			return false;
+		this.done = !this.currentIterator.hasNext();
+		return !this.done;
 	}
 
 	@Override
 	public Row next() {
-		if(count++ > limit) {
-			return null;
+		if(count++ > limit || done) {
+			throw new NoSuchElementException();
 		}
-		if(this.currentIterator.hasNext()) {
+		if(currentIterator != null && this.currentIterator.hasNext()) {
 			// On a encore des données en attente
 			return currentIterator.next();
 		} else {
@@ -60,26 +65,53 @@ final class CloseableIterator implements CloseableKeyIterator {
 			this.loadNextElements();
 			if(this.currentIterator.hasNext())
 				return this.currentIterator.next();
-			else
-				return null;
+			else {
+				done = true;
+				throw new NoSuchElementException();
+			}
 		}
 	}
 
 	private void loadNextElements() {
 		// Pas de chargement si l'itérateur n'est pas vide
-		if(this.currentIterator.hasNext())
+		if(this.currentIterator != null && this.currentIterator.hasNext() || this.lastCall)
 			return;
 		
 		List<Row> result;
-		result = store.get(table, startKey, stopKey, families, store.getScanCaching(), (count != 0));
-		this.currentRows = result;
-		this.currentIterator = currentRows.iterator();
+		int scanCaching = store.getScanCaching();
+		result = this.get(table, startKey, stopKey, families, scanCaching, (count != 0));
+		this.currentIterator = result.iterator();
+		int size = result.size();
+		
+		if (size == 0)
+			this.done = true;
+		
+		if (size < scanCaching)
+			this.lastCall = true;
 		
 		if(result.size() >= 1) {
 			// dernière clé
 			this.startKey = result.get(result.size()-1).getKey();
 		}
 		
+	}
+	
+	private List<Row> get(String table, String startKey, String stopKey,
+			Set<String> families2, int maxBulk, boolean excludeFirstElement) {
+		List<Row> result = new ArrayList<Row>(maxBulk);
+		
+		int firstRank = startKey == null ? 0 : store.idToRank(table, startKey, false);
+		if (excludeFirstElement)
+			firstRank++;
+
+		Set<String> redisKeys = store.getReadableRedis().zrange(
+				store.getKey(table), firstRank, firstRank + maxBulk);
+
+		for (String key : redisKeys) {
+			if (stopKey == null || stopKey.compareTo(key) > 0)
+				result.add(new RowWrapper(key, store.get(table, key, families2)));
+		}
+		return result;
 	}
 
 	@Override
