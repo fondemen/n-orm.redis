@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.codec.binary.Base64;
 
@@ -24,7 +25,6 @@ import com.googlecode.n_orm.storeapi.Constraint;
 import com.googlecode.n_orm.storeapi.Row;
 import com.googlecode.n_orm.storeapi.SimpleStore;
 
-
 // <table> -> liste ordonnée avec (poids-> id)
 // <table>:<id>:families -> un set de string
 // <table>:<id>:<column family>:keys -> un sorted set de string
@@ -34,6 +34,7 @@ import com.googlecode.n_orm.storeapi.SimpleStore;
 public class RedisStore implements SimpleStore {
 	private static final String SEPARATOR = ":";
 	private JedisProxy fakeJedis = new JedisProxy("localhost");
+
 	public static enum DataTypes {
 		keys, vals, increments
 	}
@@ -43,74 +44,77 @@ public class RedisStore implements SimpleStore {
 	private static final int DEFAULT_COLUMN_SCORE = 0;
 	protected static RedisStore store;
 	protected boolean isWriting = false;
-	
+
 	public static JedisPoolConfig poolConfig = new JedisPoolConfig();
 	public static JedisPool pool;
-	public static int countRead;
-	public static int countWrite;
-	
+	public static AtomicInteger countRead = new AtomicInteger();
+	public static AtomicInteger countWrite = new AtomicInteger();
+
 	/**
 	 * Instantiate a unique RedisStore and return it
 	 * 
 	 * @return the RedisStore
 	 */
 	public static RedisStore getStore() {
-		if(RedisStore.store == null) {
+		if (RedisStore.store == null) {
 			RedisStore.store = new RedisStore();
-			 pool = new JedisPool(poolConfig, "localhost");
+			pool = new JedisPool(poolConfig, "localhost");
 		}
 		return store;
 	}
-	
+
 	public static RedisStore getStore(String host) {
-		if(RedisStore.store == null) {
+		if (RedisStore.store == null) {
 			RedisStore.store = new RedisStore();
-			 pool = new JedisPool(poolConfig, host);
+			pool = new JedisPool(poolConfig, host);
 		}
 		return store;
 	}
-	
+
 	public static RedisStore getStore(String host, int port) {
-		if(RedisStore.store == null) {
+		if (RedisStore.store == null) {
 			RedisStore.store = new RedisStore();
-			 pool = new JedisPool(poolConfig, host, port);
+			pool = new JedisPool(poolConfig, host, port);
 		}
 		return store;
 	}
-	
+
 	/**
-	 * Default port is 6379
-	 * Default timemout is 2000
+	 * Default port is 6379 Default timemout is 2000
+	 * 
 	 * @param host
 	 * @param port
 	 * @param timeout
 	 * @param password
 	 * @return
 	 */
-	public static RedisStore getStore(String host, int port, int timeout, String password) {
-		if(RedisStore.store == null) {
+	public static RedisStore getStore(String host, int port, int timeout,
+			String password) {
+		if (RedisStore.store == null) {
 			RedisStore.store = new RedisStore();
-			 pool = new JedisPool(poolConfig, host, port, timeout, password);
+			pool = new JedisPool(poolConfig, host, port, timeout, password);
 		}
 		return store;
 	}
 
 	public JedisProxy getReadableRedis() {
-		countRead++;
-		System.out.println("Accès lecture "+countRead);
+		int c = countRead.incrementAndGet();
+		if (c % 100 == 0)
+			System.out.println("Accès lecture " + countRead);
 		return fakeJedis;
 	}
 
 	protected Jedis getWritableRedis() {
-		countWrite++;
-		System.out.println("Accès écriture "+countWrite);
+		int c = countWrite.incrementAndGet();
+		if (c % 100 == 0)
+			System.out.println("Accès écriture " + countWrite);
 		return fakeJedis;
 	}
 
 	@Override
 	public void start() throws DatabaseNotReachedException {
 		// Do nothing
-		
+
 	}
 
 	/**
@@ -131,11 +135,10 @@ public class RedisStore implements SimpleStore {
 	 * :<id>:<family>:keys exist
 	 */
 	@Override
-	public boolean exists(
-			String table, String id, String family)
+	public boolean exists(String table, String id, String family)
 			throws DatabaseNotReachedException {
-		return (this.getReadableRedis().exists(this.getKey(table, id, family,
-				DataTypes.keys)));
+		return (this.getReadableRedis().zcard(
+				this.getKey(table, id, family, DataTypes.keys)) > 0);
 	}
 
 	/**
@@ -164,29 +167,30 @@ public class RedisStore implements SimpleStore {
 		// on récupère les résultats entre les 2 clés
 
 		String startKey, stopKey;
-		
-		if(rangeMax == -1) {
+
+		if (rangeMax == -1) {
 			// no result, return empty Iterator
 			return new EmptyCloseableIterator();
 		}
-		
-		Set<String> startKeys = this.getReadableRedis().zrange(
-				this.getKey(table), rangeMin, rangeMin);
-		if(startKeys.size() == 0)
+
+		String key = this.getKey(table);
+		Set<String> startKeys = this.getReadableRedis().zrange(key, rangeMin,
+				rangeMin);
+		if (startKeys.size() == 0)
 			return new EmptyCloseableIterator();
 		else
 			startKey = startKeys.iterator().next();
-		
+
 		// FIXME HERE
-		Set<String> stopKeys = this.getReadableRedis().zrange(
-				this.getKey(table), rangeMax, rangeMax);
-		if(stopKeys.size() == 0)
+		Set<String> stopKeys = this.getReadableRedis().zrange(key, rangeMax,
+				rangeMax);
+		if (stopKeys.size() == 0)
 			stopKey = null;
 		else
 			stopKey = stopKeys.iterator().next();
 
-
-		return new CloseableIterator(RedisStore.this, startKey, stopKey, table, limit, families);
+		return new CloseableIterator(RedisStore.this, startKey, stopKey, table,
+				limit, families);
 	}
 
 	/**
@@ -203,10 +207,20 @@ public class RedisStore implements SimpleStore {
 	@Override
 	public byte[] get(String table, String id, String family, String key)
 			throws DatabaseNotReachedException {
+		
+		//Getting value from normal vals
 		String result = this.getReadableRedis().hget(
 				this.getKey(table, id, family, DataTypes.vals), key);
-		return (result != null) ? this.decodeFromRedis(table, id, family, key,
-				result) : null;
+		if (result != null)
+			return this.decodeFromRedis(table, id, family, key, result);
+
+		//Getting value from incrementing vals
+		result = this.getReadableRedis().hget(
+				this.getKey(table, id, family, DataTypes.increments), key);
+		if (result != null)
+			return decodeIncrementing(result);
+		
+		return null;
 	}
 
 	/**
@@ -221,42 +235,25 @@ public class RedisStore implements SimpleStore {
 	@Override
 	public Map<String, byte[]> get(String table, String id, String family)
 			throws DatabaseNotReachedException {
-		// get keys associated to the family <table>:<id>:<family>:keys
-		Set<String> familyKeys = this.getReadableRedis().zrangeByScore(
-				this.getKey(table, id, family, DataTypes.keys),
-				Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY);
 
-		return this.getWithKeys(table, id, family,
-				familyKeys.toArray(new String[0]));
-	}
+		Map<String, byte[]> ret = new HashMap<String, byte[]>();
+		Map<String, String> familyRedisResult;
 
-	/**
-	 * Get a Map of {key => value] with a specified table, id, family and set of
-	 * keys
-	 * 
-	 * @param table
-	 * @param id
-	 * @param family
-	 * @param keys
-	 * @return
-	 */
-	public Map<String, byte[]> getWithKeys(String table, String id,
-			String family, String[] keys) {
-
-		Map<String, byte[]> familyResult = new HashMap<String, byte[]>();
-
-		if (keys.length == 0)
-			return familyResult;
-
-		List<String> familyRedisResult = this.getReadableRedis().hmget(
-				this.getKey(table, id, family, DataTypes.vals), keys);
-
-		// add and convert values from the family to a map
-		for (int i = 0; i < keys.length; i++) {
-			familyResult.put(keys[i], this.decodeFromRedis(table, id, family,
-					keys[i], familyRedisResult.get(i)));
+		// Grabbing all values
+		familyRedisResult = this.getReadableRedis().hgetAll(
+				this.getKey(table, id, family, DataTypes.vals));
+		for (Entry<String, String> result : familyRedisResult.entrySet()) {
+			ret.put(result.getKey(), this.decodeFromRedis(table, id, family,
+					result.getKey(), result.getValue()));
 		}
-		return familyResult;
+
+		// Grabbing incrementing values
+		familyRedisResult = this.getReadableRedis().hgetAll(
+				this.getKey(table, id, family, DataTypes.increments));
+		for (Entry<String, String> result : familyRedisResult.entrySet()) {
+			ret.put(result.getKey(), this.decodeIncrementing(result.getValue()));
+		}
+		return ret;
 	}
 
 	/**
@@ -275,16 +272,50 @@ public class RedisStore implements SimpleStore {
 			Constraint c) throws DatabaseNotReachedException {
 		// la contrainte porte sur les clés dans la famille
 		int rangeMin = (c != null && c.getStartKey() != null) ? this
-				.columnToRank(table, id, family, c.getStartKey(), false) : DEFAULT_COLUMN_SCORE;
+				.columnToRank(table, id, family, c.getStartKey(), false)
+				: DEFAULT_COLUMN_SCORE;
 		int rangeMax = (c != null && c.getEndKey() != null) ? this
 				.columnToRank(table, id, family, c.getEndKey(), true)
 				: Integer.MAX_VALUE;
 
-		Set<String> keys = this.getReadableRedis().zrange(
+		Set<String> keysS = this.getReadableRedis().zrange(
 				this.getKey(table, id, family, DataTypes.keys), rangeMin,
 				rangeMax);
+		String[] keys = keysS.toArray(new String[keysS.size()]);
 
-		return this.getWithKeys(table, id, family, keys.toArray(new String[0]));
+		Map<String, byte[]> familyResult = new HashMap<String, byte[]>();
+
+		if (keys.length == 0)
+			return familyResult;
+
+		//Here, we assume that there are more values than increments
+		// First getting normal values
+		List<String> familyRedisResult = this.getReadableRedis().hmget(
+				this.getKey(table, id, family, DataTypes.vals), keys);
+		List<String> missingKeys = new ArrayList<String>(keys.length);
+		// add and convert values from the family to a map
+		for (int i = 0; i < keys.length; i++) {
+			String val = familyRedisResult.get(i);
+			if (val != null)
+				familyResult.put(keys[i], this.decodeFromRedis(table, id,
+						family, keys[i], familyRedisResult.get(i)));
+			else
+				missingKeys.add(keys[i]);
+		}
+
+		// grabbing missing values from increments
+		if (!missingKeys.isEmpty()) {
+			keys = missingKeys.toArray(new String[missingKeys.size()]);
+			familyRedisResult = this.getReadableRedis().hmget(
+					this.getKey(table, id, family, DataTypes.increments), keys);
+			// add and convert values from the family to a map
+			for (int i = 0; i < keys.length; i++) {
+				String val = familyRedisResult.get(i);
+				familyResult.put(keys[i], decodeIncrementing(val));
+			}
+		}
+
+		return familyResult;
 	}
 
 	/**
@@ -296,10 +327,9 @@ public class RedisStore implements SimpleStore {
 
 		Map<String, Map<String, byte[]>> result = new HashMap<String, Map<String, byte[]>>();
 
-		// If the family set is not, give all the families
+		// If the family set is empty, give all the families
 		if (columnFamilies == null)
 			columnFamilies = this.getFamilies(table, id);
-
 
 		// Iteration on families
 		Map<String, byte[]> keys;
@@ -315,42 +345,44 @@ public class RedisStore implements SimpleStore {
 
 		return result;
 	}
-	
+
 	/**
 	 * Get the element startKey and the maxBulk next elements
+	 * 
 	 * @param table
 	 * @param startKey
 	 * @param families2
 	 * @param maxBulk
 	 */
-	public List<Row> get(String table, String startKey, String stopKey, Set<String> families2,
-			int maxBulk, boolean excludeFirstElement) {
+	public List<Row> get(String table, String startKey, String stopKey,
+			Set<String> families2, int maxBulk, boolean excludeFirstElement) {
 		List<Row> result = new ArrayList<Row>();
 		int delta = maxBulk;
-		
+
 		int firstRank = this.idToRank(table, startKey, false);
-		if(excludeFirstElement)
+		if (excludeFirstElement)
 			firstRank++;
-		
+
 		int lastRank;
-		if(stopKey != null)
+		if (stopKey != null)
 			lastRank = this.idToRank(table, stopKey, true);
 		else
-			lastRank = Integer.MAX_VALUE; 
-			
-		//System.out.println("1st rank: "+firstRank+"("+startKey+"), last rank: "+lastRank+"("+stopKey+")");
-		if(lastRank == -1)
+			lastRank = Integer.MAX_VALUE;
+
+		// System.out.println("1st rank: "+firstRank+"("+startKey+"), last rank: "+lastRank+"("+stopKey+")");
+		if (lastRank == -1)
 			return result;
-		
-		if(lastRank < firstRank)
+
+		if (lastRank < firstRank)
 			return result;
-		
-		if(lastRank - firstRank < maxBulk)
+
+		if (lastRank - firstRank < maxBulk)
 			delta = lastRank - firstRank + 1;
-		
-		Set<String> redisKeys = this.getReadableRedis().zrange(this.getKey(table), firstRank, firstRank + delta - 1);
-		
-		for(String key : redisKeys) {
+
+		Set<String> redisKeys = this.getReadableRedis().zrange(
+				this.getKey(table), firstRank, firstRank + delta - 1);
+
+		for (String key : redisKeys) {
 			result.add(new RowWrapper(key, this.get(table, key, families2)));
 		}
 		return result;
@@ -387,13 +419,15 @@ public class RedisStore implements SimpleStore {
 			Map<String, Map<String, Number>> increments)
 
 	throws DatabaseNotReachedException {
-		
+
+		String tableKey = this.getKey(table);
+		String idKey = this.getKey(table, id);
+		// Add the key
+		this.getWritableRedis().zadd(tableKey, this.idToScore(id), id);
+		this.getWritableRedis().sadd(idKey, "");
+
 		if (changed != null) {
 
-			// Add the key
-			this.getWritableRedis().zadd(this.getKey(table), this.idToScore(id), id);
-			this.getWritableRedis().sadd(this.getKey(table, id),"");
-					
 			// Add changed rows for each families
 			for (Map.Entry<String, Map<String, byte[]>> family : changed
 					.entrySet()) {
@@ -407,13 +441,14 @@ public class RedisStore implements SimpleStore {
 							this.encodeToRedis(key.getValue()));
 				}
 				// add the family in the set of family
-				this.getWritableRedis().sadd(this.getKey(table, id), family.getKey());
+				this.getWritableRedis().sadd(idKey, family.getKey());
 
 				// add the set of keys
 				for (String redisKey : family.getValue().keySet()) {
-					this.getWritableRedis().zadd(this.getKey(table, id, family.getKey(),
-							DataTypes.keys), this.columnToScore(redisKey),
-							redisKey);
+					this.getWritableRedis().zadd(
+							this.getKey(table, id, family.getKey(),
+									DataTypes.keys),
+							this.columnToScore(redisKey), redisKey);
 				}
 
 				// add the { key => value } hashmap
@@ -429,14 +464,19 @@ public class RedisStore implements SimpleStore {
 			for (Entry<String, Set<String>> family : removed.entrySet()) {
 				for (String redisKey : family.getValue()) {
 					// remove from the list of keys...
-					this.getWritableRedis().zrem(this.getKey(table, id, family.getKey(),
-							DataTypes.keys), redisKey);
+					this.getWritableRedis().zrem(
+							this.getKey(table, id, family.getKey(),
+									DataTypes.keys), redisKey);
 					// ... and from the hashmap
-					this.getWritableRedis().hdel(this.getKey(table, id, family.getKey(),
-							DataTypes.vals), redisKey);
+					this.getWritableRedis().hdel(
+							this.getKey(table, id, family.getKey(),
+									DataTypes.vals), redisKey);
 
-					this.getWritableRedis().hdel(this.getKey(table, id, family.getKey(),
-							DataTypes.increments), redisKey);
+					// Useless for an increment cannot be removed (i.e. get
+					// null)
+					// this.getWritableRedis().hdel(
+					// this.getKey(table, id, family.getKey(),
+					// DataTypes.increments), redisKey);
 				}
 			}
 		}
@@ -446,25 +486,24 @@ public class RedisStore implements SimpleStore {
 			for (Map.Entry<String, Map<String, Number>> family : increments
 					.entrySet()) {
 
-				// Add the key
-				this.getWritableRedis().zadd(this.getKey(table), this.idToScore(id), id);
-
 				// if the family does not exist, create it
-				this.getWritableRedis().sadd(this.getKey(table, id), family.getKey());
+				this.getWritableRedis().sadd(idKey, family.getKey());
 
 				// add the set of keys
 				for (String redisKey : family.getValue().keySet()) {
-					this.getWritableRedis().zadd(this.getKey(table, id, family.getKey(),
-							DataTypes.keys), this.columnToScore(redisKey),
-							redisKey);
+					this.getWritableRedis().zadd(
+							this.getKey(table, id, family.getKey(),
+									DataTypes.keys),
+							this.columnToScore(redisKey), redisKey);
 				}
 
 				for (Entry<String, Number> familyKey : family.getValue()
 						.entrySet()) {
 					// Increment directly in the "increments" database
-					this.getWritableRedis().hincrBy(this.getKey(table, id,
-							family.getKey(), DataTypes.increments), familyKey
-							.getKey(), familyKey.getValue().longValue());
+					this.getWritableRedis().hincrBy(
+							this.getKey(table, id, family.getKey(),
+									DataTypes.increments), familyKey.getKey(),
+							familyKey.getValue().longValue());
 				}
 			}
 		}
@@ -484,10 +523,10 @@ public class RedisStore implements SimpleStore {
 		// - <table>
 		List<String> keysToBeDeleted = new ArrayList<String>();
 
-		keysToBeDeleted.add(this.getKey(table, id));
+		String idKey = this.getKey(table, id);
+		keysToBeDeleted.add(idKey);
 
-		Set<String> families = this.getReadableRedis().smembers(
-				this.getKey(table, id));
+		Set<String> families = this.getReadableRedis().smembers(idKey);
 		for (String family : families) {
 			// - <table>:<id>:<column family>:keys
 			keysToBeDeleted.add(this.getKey(table, id, family, DataTypes.keys));
@@ -497,7 +536,8 @@ public class RedisStore implements SimpleStore {
 			keysToBeDeleted.add(this.getKey(table, id, family,
 					DataTypes.increments));
 		}
-		this.getWritableRedis().del(keysToBeDeleted.toArray(new String[keysToBeDeleted.size()]));
+		this.getWritableRedis().del(
+				keysToBeDeleted.toArray(new String[keysToBeDeleted.size()]));
 
 		this.getWritableRedis().zrem(this.getKey(table), id);
 	}
@@ -515,12 +555,12 @@ public class RedisStore implements SimpleStore {
 			throws DatabaseNotReachedException {
 
 		int rangeMin = (c != null && c.getStartKey() != null) ? this.idToRank(
-				table, c.getStartKey(), false) : DEFAULT_ID_SCORE;
+				table, c.getStartKey(), false) : 0;
 		int rangeMax = (c != null && c.getEndKey() != null) ? this.idToRank(
-				table, c.getEndKey(), true) : Integer.MAX_VALUE;
+				table, c.getEndKey(), false) : this.getReadableRedis()
+				.zcard(this.getKey(table)).intValue();
 
-		return this.getReadableRedis()
-				.zrange(this.getKey(table), rangeMin, rangeMax).size();
+		return rangeMax - rangeMin;
 	}
 
 	public void flushAll() {
@@ -557,7 +597,8 @@ public class RedisStore implements SimpleStore {
 	 * @return <table>
 	 *         :<id>:<column family>:vals -> hash de string -> string
 	 *         <table>
-	 *         <table>:<id>:<column family>:keys -> un set de strings
+	 *         <table>
+	 *         :<id>:<column family>:keys -> un set de strings
 	 */
 	protected String getKey(String table, String id, String family,
 			DataTypes type) {
@@ -581,68 +622,63 @@ public class RedisStore implements SimpleStore {
 	 * @return
 	 */
 	public int idToRank(String table, String id, Boolean endSearch) {
-		return this.redisKeyToRank(this.getReadableRedis().exists(this.getKey(table, id)), this.getKey(table), id, endSearch);
+		return this.redisKeyToRank(this.getKey(table), id, endSearch);
 	}
 
 	/**
-	 * Return the rank of a column
-	 * synchro because of the add/remove dring the search
+	 * Return the rank of a column synchro because of the add/remove dring the
+	 * search
+	 * 
 	 * @param table
 	 * @param id
 	 * @return
 	 */
 	public int columnToRank(String table, String id, String family, String key,
 			Boolean endSearch) {
-		boolean alreadyExists = this.getReadableRedis().exists(this.getKey(table, id, family, DataTypes.keys))
-				&&
-					(this.getReadableRedis().hexists(this.getKey(table, id, family, DataTypes.vals), key)
-						||
-					this.getReadableRedis().hexists(this.getKey(table, id, family, DataTypes.increments), key)
-					);
 		return this.redisKeyToRank(
-				alreadyExists,
 				this.getKey(table, id, family, DataTypes.keys), key, endSearch);
 	}
 
 	/**
 	 * Return the rank of a potential key
-	 * @param existingKey : this redis key has to exist if the object exists
-	 * @param hashKey     : the hashset where the keys are stored
-	 * @param id		  : the id of the searchable element
-	 * @param endSearch   : is it a start or a stop search
+	 * 
+	 * @param hashKey
+	 *            : the hashset where the keys are stored
+	 * @param id
+	 *            : the id of the searchable element
+	 * @param endSearch
+	 *            : is it a start or a stop search
 	 * @return
 	 */
-	protected int redisKeyToRank(boolean existingKey, String hashKey, String id, Boolean endSearch) {
-		
+	protected int redisKeyToRank(String hashKey, String id, Boolean endSearch) {
+
+		Long rank = this.getReadableRedis().zrank(hashKey, id);
 		// Remember if the key already exists
-		if(existingKey) {
+		if (rank != null) {
 			// the key is existing, return the rank :
-			
-			Long rank = this.getReadableRedis().zrank(hashKey, id);
 			return rank.intValue();
 		} else {
 			// the keys does not exist
 			Transaction t = this.getWritableRedis().multi();
-			
+
 			// Add the key
 			t.zadd(hashKey, 0, id);
-	
+
 			// get the rank of the freshly inserted id
 			Response<Long> rankR = t.zrank(hashKey, id);
-	
+
 			// Remove the key
 			t.zrem(hashKey, id);
-			
-			//Doing transaction
+
+			// Doing transaction
 			List<Object> res = t.exec();
-			Long rank = rankR.get();
-			
-	
+			rank = rankR.get();
+
 			// if the value do not already exists, remove 1 from the rank
 			// if we want the previous value (endSearch)
 			if (endSearch)
 				rank--;
-	
+
 			return rank.intValue();
 		}
 
@@ -650,9 +686,6 @@ public class RedisStore implements SimpleStore {
 
 	/**
 	 * Encode binary data to Base64 String
-	 * 
-	 * @param data
-	 * @return
 	 */
 	public String encodeToRedis(byte[] data) {
 		return Base64.encodeBase64String(data);
@@ -660,31 +693,18 @@ public class RedisStore implements SimpleStore {
 
 	/**
 	 * Decode Base64-encoded String to binary data
-	 * 
-	 * @param data
-	 * @return
 	 */
 	public byte[] decodeFromRedis(String table, String id, String family,
 			String row, String data) {
-		byte[] decodedData;
-		// If the data is saved in the "vals" hash, decode frop base64
-		if (data != null && data.length() != 0)
-			decodedData = Base64.decodeBase64(data);
-		else { // The data is null, we search in the increment table
-			String incrementData = this.getReadableRedis().hget(
-					this.getKey(table, id, family, DataTypes.increments), row);
-			if (incrementData == null || incrementData.length() == 0)
-				return new byte[] {};
-
-			decodedData = ConversionTools.convert(
-					Long.parseLong(incrementData), Long.class);
-		}
-		if (decodedData != null)
-			return decodedData;
-		else
-			return new byte[] {};
+		return (data != null && data.length() != 0) ? Base64.decodeBase64(data)
+				: new byte[0];
 	}
 
-
+	/**
+	 * Decode encoded number to binary data
+	 */
+	public byte[] decodeIncrementing(String result) {
+		return ConversionTools.convert(Long.parseLong(result), Long.class);
+	}
 
 }
