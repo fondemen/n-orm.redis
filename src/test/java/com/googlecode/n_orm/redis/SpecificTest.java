@@ -51,7 +51,7 @@ public class SpecificTest {
 		cf.add("family2");
 		cf.add("family3");
 		cf.add("family4");
-		System.out.println(store.get(testTable, "123456", cf));
+		//System.out.println(store.get(testTable, "123456", cf));
 		
 	}
 	
