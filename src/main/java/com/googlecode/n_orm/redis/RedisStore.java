@@ -50,8 +50,8 @@ public class RedisStore implements SimpleStore {
 
 	public static JedisPoolConfig poolConfig = new JedisPoolConfig();
 	public static JedisPool pool;
-	public static AtomicInteger countRead = new AtomicInteger();
-	public static AtomicInteger countWrite = new AtomicInteger();
+//	public static AtomicInteger countRead = new AtomicInteger();
+//	public static AtomicInteger countWrite = new AtomicInteger();
 
 	/**
 	 * Instantiate a unique RedisStore and return it
@@ -120,16 +120,16 @@ public class RedisStore implements SimpleStore {
 	}
 
 	public JedisProxy getReadableRedis() {
-		int c = countRead.incrementAndGet();
-		if (c % 100 == 0)
-			System.out.println("Accès lecture " + countRead);
+//		int c = countRead.incrementAndGet();
+//		if (c % 100 == 0)
+//			System.out.println("Accès lecture " + countRead);
 		return fakeJedis;
 	}
 
 	protected Jedis getWritableRedis() {
-		int c = countWrite.incrementAndGet();
-		if (c % 100 == 0)
-			System.out.println("Accès écriture " + countWrite);
+//		int c = countWrite.incrementAndGet();
+//		if (c % 100 == 0)
+//			System.out.println("Accès écriture " + countWrite);
 		return fakeJedis;
 	}
 
