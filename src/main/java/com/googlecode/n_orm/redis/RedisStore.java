@@ -26,7 +26,7 @@ import com.googlecode.n_orm.storeapi.Row;
 import com.googlecode.n_orm.storeapi.SimpleStore;
 
 // <table> -> liste ordonnée avec (poids-> id)
-// <table>:<id>:families -> un set de string
+// <table>:families -> un set de string
 // <table>:<id>:<column family>:keys -> un sorted set de string
 //<table>:<id>:<column family>:vals -> un hash de string -> string
 //<table>:<id>:<column family>:increments -> un hash de string -> string
@@ -329,7 +329,7 @@ public class RedisStore implements SimpleStore {
 
 		// If the family set is empty, give all the families
 		if (columnFamilies == null)
-			columnFamilies = this.getFamilies(table, id);
+			columnFamilies = this.getFamilies(table);
 
 		// Iteration on families
 		Map<String, byte[]> keys;
@@ -392,12 +392,11 @@ public class RedisStore implements SimpleStore {
 	 * Return the list of the families associated to an id and a table
 	 * 
 	 * @param table
-	 * @param id
 	 * @return Set of family (or empty set)
 	 */
-	protected Set<String> getFamilies(String table, String id) {
+	protected Set<String> getFamilies(String table) {
 		Set<String> families = this.getReadableRedis().smembers(
-				this.getKey(table, id));
+				this.getFamiliesKey(table));
 		return (families != null) ? families : new TreeSet<String>();
 	}
 
@@ -421,10 +420,10 @@ public class RedisStore implements SimpleStore {
 	throws DatabaseNotReachedException {
 
 		String tableKey = this.getKey(table);
-		String idKey = this.getKey(table, id);
+		String famKey = this.getFamiliesKey(table);
 		// Add the key
 		this.getWritableRedis().zadd(tableKey, this.idToScore(id), id);
-		this.getWritableRedis().sadd(idKey, "");
+		//this.getWritableRedis().sadd(famKey, "");
 
 		if (changed != null) {
 
@@ -441,7 +440,7 @@ public class RedisStore implements SimpleStore {
 							this.encodeToRedis(key.getValue()));
 				}
 				// add the family in the set of family
-				this.getWritableRedis().sadd(idKey, family.getKey());
+				this.getWritableRedis().sadd(famKey, family.getKey());
 
 				// add the set of keys
 				for (String redisKey : family.getValue().keySet()) {
@@ -487,7 +486,7 @@ public class RedisStore implements SimpleStore {
 					.entrySet()) {
 
 				// if the family does not exist, create it
-				this.getWritableRedis().sadd(idKey, family.getKey());
+				this.getWritableRedis().sadd(famKey, family.getKey());
 
 				// add the set of keys
 				for (String redisKey : family.getValue().keySet()) {
@@ -523,10 +522,9 @@ public class RedisStore implements SimpleStore {
 		// - <table>
 		List<String> keysToBeDeleted = new ArrayList<String>();
 
-		String idKey = this.getKey(table, id);
-		keysToBeDeleted.add(idKey);
+		String famKey = this.getFamiliesKey(table);
 
-		Set<String> families = this.getReadableRedis().smembers(idKey);
+		Set<String> families = this.getReadableRedis().smembers(famKey);
 		for (String family : families) {
 			// - <table>:<id>:<column family>:keys
 			keysToBeDeleted.add(this.getKey(table, id, family, DataTypes.keys));
@@ -536,10 +534,9 @@ public class RedisStore implements SimpleStore {
 			keysToBeDeleted.add(this.getKey(table, id, family,
 					DataTypes.increments));
 		}
+		this.getWritableRedis().zrem(this.getKey(table), id);
 		this.getWritableRedis().del(
 				keysToBeDeleted.toArray(new String[keysToBeDeleted.size()]));
-
-		this.getWritableRedis().zrem(this.getKey(table), id);
 	}
 
 	/**
@@ -578,14 +575,13 @@ public class RedisStore implements SimpleStore {
 	}
 
 	/**
-	 * Return the redis key for the list of families for the id
+	 * Return the redis key for the list of families for the table
 	 * 
 	 * @param table
-	 * @param id
-	 * @return table:id:families -> un set de string
+	 * @return table:families -> un set de string
 	 */
-	protected String getKey(String table, String id) {
-		return table + SEPARATOR + id + SEPARATOR + FAMILIES;
+	protected String getFamiliesKey(String table) {
+		return table + SEPARATOR + FAMILIES;
 	}
 
 	/**
