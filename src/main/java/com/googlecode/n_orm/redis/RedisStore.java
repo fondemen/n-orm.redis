@@ -43,6 +43,9 @@ public class RedisStore implements SimpleStore {
 	private static final int DEFAULT_ID_SCORE = 0;
 	private static final int DEFAULT_COLUMN_SCORE = 0;
 	protected static RedisStore store;
+
+	protected int scanCaching = 50;
+
 	protected boolean isWriting = false;
 
 	public static JedisPoolConfig poolConfig = new JedisPoolConfig();
@@ -95,6 +98,25 @@ public class RedisStore implements SimpleStore {
 			pool = new JedisPool(poolConfig, host, port, timeout, password);
 		}
 		return store;
+	}
+
+	/**
+	 * The number of elements collected at once by an iterator.
+	 * 
+	 * @see #get(String, Constraint, int, Set)
+	 */
+	public int getScanCaching() {
+		return scanCaching;
+	}
+
+	/**
+	 * The number of elements collected at once by an iterator. Default value is
+	 * 50.
+	 * 
+	 * @see #get(String, Constraint, int, Set)
+	 */
+	public void setScanCaching(int scanCaching) {
+		this.scanCaching = scanCaching;
 	}
 
 	public JedisProxy getReadableRedis() {
@@ -155,41 +177,8 @@ public class RedisStore implements SimpleStore {
 	@Override
 	public CloseableKeyIterator get(String table, Constraint c, int limit,
 			Set<String> families) throws DatabaseNotReachedException {
-
-		int rangeMin = (c != null && c.getStartKey() != null) ? this.idToRank(
-				table, c.getStartKey(), false) : DEFAULT_ID_SCORE;
-		int rangeMax = (c != null && c.getEndKey() != null) ? this.idToRank(
-				table, c.getEndKey(), true) : Integer.MAX_VALUE;
-
-		// méthode pour chercher entre 2 clés :
-		// on insère les clés
-		// on demande le rang de chaque clé
-		// on récupère les résultats entre les 2 clés
-
-		String startKey, stopKey;
-
-		if (rangeMax == -1) {
-			// no result, return empty Iterator
-			return new EmptyCloseableIterator();
-		}
-
-		String key = this.getKey(table);
-		Set<String> startKeys = this.getReadableRedis().zrange(key, rangeMin,
-				rangeMin);
-		if (startKeys.size() == 0)
-			return new EmptyCloseableIterator();
-		else
-			startKey = startKeys.iterator().next();
-
-		// FIXME HERE
-		Set<String> stopKeys = this.getReadableRedis().zrange(key, rangeMax,
-				rangeMax);
-		if (stopKeys.size() == 0)
-			stopKey = null;
-		else
-			stopKey = stopKeys.iterator().next();
-
-		return new CloseableIterator(RedisStore.this, startKey, stopKey, table,
+		return new CloseableIterator(RedisStore.this, c == null ? null
+				: c.getStartKey(), c == null ? null : c.getEndKey(), table,
 				limit, families);
 	}
 
@@ -207,19 +196,19 @@ public class RedisStore implements SimpleStore {
 	@Override
 	public byte[] get(String table, String id, String family, String key)
 			throws DatabaseNotReachedException {
-		
-		//Getting value from normal vals
+
+		// Getting value from normal vals
 		String result = this.getReadableRedis().hget(
 				this.getKey(table, id, family, DataTypes.vals), key);
 		if (result != null)
 			return this.decodeFromRedis(table, id, family, key, result);
 
-		//Getting value from incrementing vals
+		// Getting value from incrementing vals
 		result = this.getReadableRedis().hget(
 				this.getKey(table, id, family, DataTypes.increments), key);
 		if (result != null)
 			return decodeIncrementing(result);
-		
+
 		return null;
 	}
 
@@ -288,7 +277,7 @@ public class RedisStore implements SimpleStore {
 		if (keys.length == 0)
 			return familyResult;
 
-		//Here, we assume that there are more values than increments
+		// Here, we assume that there are more values than increments
 		// First getting normal values
 		List<String> familyRedisResult = this.getReadableRedis().hmget(
 				this.getKey(table, id, family, DataTypes.vals), keys);
@@ -356,34 +345,18 @@ public class RedisStore implements SimpleStore {
 	 */
 	public List<Row> get(String table, String startKey, String stopKey,
 			Set<String> families2, int maxBulk, boolean excludeFirstElement) {
-		List<Row> result = new ArrayList<Row>();
-		int delta = maxBulk;
-
-		int firstRank = this.idToRank(table, startKey, false);
+		List<Row> result = new ArrayList<Row>(maxBulk);
+		
+		int firstRank = startKey == null ? 0 : this.idToRank(table, startKey, false);
 		if (excludeFirstElement)
 			firstRank++;
 
-		int lastRank;
-		if (stopKey != null)
-			lastRank = this.idToRank(table, stopKey, true);
-		else
-			lastRank = Integer.MAX_VALUE;
-
-		// System.out.println("1st rank: "+firstRank+"("+startKey+"), last rank: "+lastRank+"("+stopKey+")");
-		if (lastRank == -1)
-			return result;
-
-		if (lastRank < firstRank)
-			return result;
-
-		if (lastRank - firstRank < maxBulk)
-			delta = lastRank - firstRank + 1;
-
 		Set<String> redisKeys = this.getReadableRedis().zrange(
-				this.getKey(table), firstRank, firstRank + delta - 1);
+				this.getKey(table), firstRank, firstRank + maxBulk);
 
 		for (String key : redisKeys) {
-			result.add(new RowWrapper(key, this.get(table, key, families2)));
+			if (stopKey == null || stopKey.compareTo(key) > 0)
+				result.add(new RowWrapper(key, this.get(table, key, families2)));
 		}
 		return result;
 	}
@@ -423,7 +396,7 @@ public class RedisStore implements SimpleStore {
 		String famKey = this.getFamiliesKey(table);
 		// Add the key
 		this.getWritableRedis().zadd(tableKey, this.idToScore(id), id);
-		//this.getWritableRedis().sadd(famKey, "");
+		// this.getWritableRedis().sadd(famKey, "");
 
 		if (changed != null) {
 

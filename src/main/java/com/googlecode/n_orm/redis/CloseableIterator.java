@@ -9,7 +9,6 @@ import com.googlecode.n_orm.storeapi.CloseableKeyIterator;
 import com.googlecode.n_orm.storeapi.Row;
 
 final class CloseableIterator implements CloseableKeyIterator {
-	private static final int MAX_BULK = 100;
 	private String startKey;
 	private final String stopKey, table;
 	private final Set<String> families;
@@ -22,17 +21,14 @@ final class CloseableIterator implements CloseableKeyIterator {
 	public CloseableIterator(RedisStore store, String startKey,
 			String stopKey, String table, int limit, Set<String> families) {
 		this.store = store;
-		this.startKey = startKey;
 		this.stopKey = stopKey;
+		this.startKey = startKey;
 		this.table = table;
 		this.limit = limit;
 		this.families = families;
 		this.currentRows = new ArrayList<Row>();
 		this.currentIterator = this.currentRows.iterator();
 		this.count = 0;
-		
-		// Force to load firsts elements
-		hasNext();
 	}
 
 	@Override
@@ -75,7 +71,7 @@ final class CloseableIterator implements CloseableKeyIterator {
 			return;
 		
 		List<Row> result;
-		result = store.get(table, startKey, stopKey, families, MAX_BULK, (count != 0));
+		result = store.get(table, startKey, stopKey, families, store.getScanCaching(), (count != 0));
 		this.currentRows = result;
 		this.currentIterator = currentRows.iterator();
 		
