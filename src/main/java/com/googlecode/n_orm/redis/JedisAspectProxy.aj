@@ -15,8 +15,8 @@ aspect JedisAspectProxy {
 
 	pointcut jedisCall(): call(* *..Jedis.*(..));
 	
-	Object around(Jedis jedis): jedisCall() && target(jedis) {
-		Jedis currentJedis = RedisStore.pool.getResource();
+	Object around(Jedis jedis, RedisStore store): jedisCall() && target(jedis) && this(store) {
+		Jedis currentJedis = store.pool.getResource();
 		Object result = null;
 		
 		Object[] args = thisJoinPoint.getArgs();
@@ -26,18 +26,18 @@ aspect JedisAspectProxy {
 		
 		try {
 			result = method.invoke(currentJedis, args);
-			RedisStore.pool.returnResource(currentJedis);
+			store.pool.returnResource(currentJedis);
 		} catch(Exception e) {
 			logger.log(Level.WARNING, "Exception in RedisProxy caught ; retrying...", e);
 
-			RedisStore.pool.returnBrokenResource(currentJedis);
-			currentJedis = RedisStore.pool.getResource();
+			store.pool.returnBrokenResource(currentJedis);
+			currentJedis = store.pool.getResource();
 			try {
 				result = method.invoke(currentJedis, args);
-				RedisStore.pool.returnResource(currentJedis);
+				store.pool.returnResource(currentJedis);
 			} catch (Exception e1) {
 				logger.log(Level.WARNING, "2nd Exception in RedisProxy ; aborting", e);
-				RedisStore.pool.returnBrokenResource(currentJedis);
+				store.pool.returnBrokenResource(currentJedis);
 			}
 
 			

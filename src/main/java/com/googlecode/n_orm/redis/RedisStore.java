@@ -5,9 +5,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.codec.binary.Base64;
 
@@ -18,7 +18,6 @@ import redis.clients.jedis.Response;
 import redis.clients.jedis.Transaction;
 
 import com.googlecode.n_orm.DatabaseNotReachedException;
-import com.googlecode.n_orm.EmptyCloseableIterator;
 import com.googlecode.n_orm.conversion.ConversionTools;
 import com.googlecode.n_orm.storeapi.CloseableKeyIterator;
 import com.googlecode.n_orm.storeapi.Constraint;
@@ -42,16 +41,18 @@ public class RedisStore implements SimpleStore {
 	private static final String FAMILIES = "families";
 	private static final int DEFAULT_ID_SCORE = 0;
 	private static final int DEFAULT_COLUMN_SCORE = 0;
-	protected static RedisStore store;
+
+	public static Map<Properties, RedisStore> stores = new HashMap<Properties, RedisStore>();
+	public static JedisPoolConfig poolConfig = new JedisPoolConfig();
 
 	protected int scanCaching = 50;
 
 	protected boolean isWriting = false;
 
-	public static JedisPoolConfig poolConfig = new JedisPoolConfig();
-	public static JedisPool pool;
+	public JedisPool pool;
 //	public static AtomicInteger countRead = new AtomicInteger();
 //	public static AtomicInteger countWrite = new AtomicInteger();
+	
 
 	/**
 	 * Instantiate a unique RedisStore and return it
@@ -59,31 +60,43 @@ public class RedisStore implements SimpleStore {
 	 * @return the RedisStore
 	 */
 	public static RedisStore getStore() {
-		if (RedisStore.store == null) {
-			RedisStore.store = new RedisStore();
-			pool = new JedisPool(poolConfig, "localhost");
+		Properties p = new Properties();
+		RedisStore store = stores.get(p);
+		if (store == null) {
+			store = new RedisStore();
+			store.pool = new JedisPool(poolConfig, "localhost");
+			stores.put(p, store);
 		}
 		return store;
 	}
 
 	public static RedisStore getStore(String host) {
-		if (RedisStore.store == null) {
-			RedisStore.store = new RedisStore();
-			pool = new JedisPool(poolConfig, host);
+		Properties p = new Properties();
+		p.put("host", host);
+		RedisStore store = stores.get(p);
+		if (store == null) {
+			store = new RedisStore();
+			store.pool = new JedisPool(poolConfig, host);
+			stores.put(p, store);
 		}
 		return store;
 	}
 
 	public static RedisStore getStore(String host, int port) {
-		if (RedisStore.store == null) {
-			RedisStore.store = new RedisStore();
-			pool = new JedisPool(poolConfig, host, port);
+		Properties p = new Properties();
+		p.put("host", host);
+		p.put("port", port);
+		RedisStore store = stores.get(p);
+		if (store == null) {
+			store = new RedisStore();
+			store.pool = new JedisPool(poolConfig, host, port);
+			stores.put(p, store);
 		}
 		return store;
 	}
 
 	/**
-	 * Default port is 6379 Default timemout is 2000
+	 * Default port is 6379 Default timeout is 2000
 	 * 
 	 * @param host
 	 * @param port
@@ -93,9 +106,16 @@ public class RedisStore implements SimpleStore {
 	 */
 	public static RedisStore getStore(String host, int port, int timeout,
 			String password) {
-		if (RedisStore.store == null) {
-			RedisStore.store = new RedisStore();
-			pool = new JedisPool(poolConfig, host, port, timeout, password);
+		Properties p = new Properties();
+		p.put("host", host);
+		p.put("port", port);
+		p.put("timeout", timeout);
+		p.put("password", password);
+		RedisStore store = stores.get(p);
+		if (store == null) {
+			store = new RedisStore();
+			store.pool = new JedisPool(poolConfig, host, port, timeout, password);
+			stores.put(p, store);
 		}
 		return store;
 	}
@@ -180,6 +200,24 @@ public class RedisStore implements SimpleStore {
 		return new CloseableIterator(RedisStore.this, c == null ? null
 				: c.getStartKey(), c == null ? null : c.getEndKey(), table,
 				limit, families);
+	}
+	
+	public List<Row> get(String table, String startKey, String stopKey,
+			Set<String> families2, int maxBulk, boolean excludeFirstElement) {
+		List<Row> result = new ArrayList<Row>(maxBulk);
+		
+		int firstRank = startKey == null ? 0 : this.idToRank(table, startKey, false);
+		if (excludeFirstElement)
+			firstRank++;
+
+		Set<String> redisKeys = this.getReadableRedis().zrange(
+				this.getKey(table), firstRank, firstRank + maxBulk);
+
+		for (String key : redisKeys) {
+			if (stopKey == null || stopKey.compareTo(key) > 0)
+				result.add(new RowWrapper(key, this.get(table, key, families2)));
+		}
+		return result;
 	}
 
 	/**

@@ -79,7 +79,7 @@ final class CloseableIterator implements CloseableKeyIterator {
 		
 		List<Row> result;
 		int scanCaching = store.getScanCaching();
-		result = this.get(table, startKey, stopKey, families, scanCaching, (count != 0));
+		result = store.get(table, startKey, stopKey, families, scanCaching, (count != 0));
 		this.currentIterator = result.iterator();
 		int size = result.size();
 		
@@ -94,24 +94,6 @@ final class CloseableIterator implements CloseableKeyIterator {
 			this.startKey = result.get(result.size()-1).getKey();
 		}
 		
-	}
-	
-	private List<Row> get(String table, String startKey, String stopKey,
-			Set<String> families2, int maxBulk, boolean excludeFirstElement) {
-		List<Row> result = new ArrayList<Row>(maxBulk);
-		
-		int firstRank = startKey == null ? 0 : store.idToRank(table, startKey, false);
-		if (excludeFirstElement)
-			firstRank++;
-
-		Set<String> redisKeys = store.getReadableRedis().zrange(
-				store.getKey(table), firstRank, firstRank + maxBulk);
-
-		for (String key : redisKeys) {
-			if (stopKey == null || stopKey.compareTo(key) > 0)
-				result.add(new RowWrapper(key, store.get(table, key, families2)));
-		}
-		return result;
 	}
 
 	@Override
