@@ -4,6 +4,7 @@
 		<artifactId>parent-aspect</artifactId>
 		<groupId>com.googlecode.n_orm</groupId>
 		<version>0.0.1-SNAPSHOT</version>
+		<relativePath>../n-orm/parent-aspect/pom.xml</relativePath>
 	</parent>
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.googlecode.n_orm</groupId>
@@ -65,7 +66,7 @@
 		<site>
 			<id>wiki</id>
 			<name>n-orm Wiki pages</name>
-			<url>file://${basedir}/../../n-orm-wiki/redis</url>
+			<url>file://${basedir}/../n-orm-wiki/redis</url>
 		</site>
 	</distributionManagement>
 
