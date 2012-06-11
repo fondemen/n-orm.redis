@@ -15,7 +15,9 @@ import org.junit.Test;
 
 import com.googlecode.n_orm.storeapi.CloseableKeyIterator;
 import com.googlecode.n_orm.storeapi.Constraint;
+import com.googlecode.n_orm.storeapi.DefaultColumnFamilyData;
 import com.googlecode.n_orm.storeapi.Row;
+import com.googlecode.n_orm.storeapi.Row.ColumnFamilyData;
 
 
 public class BasicTest {
@@ -37,7 +39,7 @@ public class BasicTest {
 
 	@Test
 	public void test01InsertTable() {
-		Map<String, Map<String, byte[]>> data = new HashMap<String, Map<String, byte[]>>();
+		ColumnFamilyData data = new DefaultColumnFamilyData();
 		Map<String, byte[]> dataFamily1 = new HashMap<String, byte[]>();
 		Map<String, byte[]> dataFamily2 = new HashMap<String, byte[]>();
 		dataFamily1.put("cle", new String("valeur").getBytes());
@@ -117,7 +119,7 @@ public class BasicTest {
 		Set<String> families = new TreeSet<String>();
 		families.add("family1");
 		families.add("family2");
-		Map<String, Map<String, byte[]>> result = store.get(testTable, "123456", families);
+		ColumnFamilyData result = store.get(testTable, "123456", families);
 		
 		assertEquals("1", new String(result.get("family2").get("cle-fam2")));
 		assertFalse("not a valid value".equals(new String(result.get("family2").get("cle-fam2"))));
