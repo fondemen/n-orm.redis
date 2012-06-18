@@ -159,6 +159,11 @@ public class RedisStore implements SimpleStore {
 
 	}
 
+	@Override
+	public boolean hasTable(String tableName) throws DatabaseNotReachedException {
+		return this.getReadableRedis().exists(this.getKey(tableName));
+	}
+
 	/**
 	 * Test if an id exists in the table
 	 * <table>
