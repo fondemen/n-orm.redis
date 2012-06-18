@@ -21,7 +21,9 @@ import com.googlecode.n_orm.DatabaseNotReachedException;
 import com.googlecode.n_orm.conversion.ConversionTools;
 import com.googlecode.n_orm.storeapi.CloseableKeyIterator;
 import com.googlecode.n_orm.storeapi.Constraint;
+import com.googlecode.n_orm.storeapi.DefaultColumnFamilyData;
 import com.googlecode.n_orm.storeapi.Row;
+import com.googlecode.n_orm.storeapi.Row.ColumnFamilyData;
 import com.googlecode.n_orm.storeapi.SimpleStore;
 
 // <table> -> liste ordonnée avec (poids-> id)
@@ -354,10 +356,10 @@ public class RedisStore implements SimpleStore {
 	 * Returns all the values associated to the families for an specified id
 	 */
 	@Override
-	public Map<String, Map<String, byte[]>> get(String table, String id,
+	public ColumnFamilyData get(String table, String id,
 			Set<String> columnFamilies) throws DatabaseNotReachedException {
 
-		Map<String, Map<String, byte[]>> result = new HashMap<String, Map<String, byte[]>>();
+		ColumnFamilyData result = new DefaultColumnFamilyData();
 
 		// If the family set is empty, give all the families
 		if (columnFamilies == null)
@@ -403,7 +405,7 @@ public class RedisStore implements SimpleStore {
 	 */
 	@Override
 	public void storeChanges(String table, String id,
-			Map<String, Map<String, byte[]>> changed,
+			ColumnFamilyData changed,
 			Map<String, Set<String>> removed,
 			Map<String, Map<String, Number>> increments)
 
