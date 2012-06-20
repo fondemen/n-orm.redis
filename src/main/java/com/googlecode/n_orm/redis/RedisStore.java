@@ -222,7 +222,7 @@ public class RedisStore implements SimpleStore {
 
 		for (String key : redisKeys) {
 			if (stopKey == null || stopKey.compareTo(key) > 0)
-				result.add(new RowWrapper(key, this.get(table, key, families2)));
+				result.add(new RowWrapper(key, families2 == null ? null : this.get(table, key, families2)));
 		}
 		return result;
 	}
@@ -360,10 +360,6 @@ public class RedisStore implements SimpleStore {
 			Set<String> columnFamilies) throws DatabaseNotReachedException {
 
 		ColumnFamilyData result = new DefaultColumnFamilyData();
-
-		// If the family set is empty, give all the families
-		if (columnFamilies == null)
-			columnFamilies = this.getFamilies(table);
 
 		// Iteration on families
 		Map<String, byte[]> keys;
