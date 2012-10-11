@@ -7,7 +7,6 @@
 		<relativePath>../n-orm/parent-aspect/pom.xml</relativePath>
 	</parent>
 	<modelVersion>4.0.0</modelVersion>
-	<groupId>com.googlecode.n_orm</groupId>
 	<artifactId>redis</artifactId>
 	<name>Redis driver for n-orm</name>
 	<version>jedis-${jedis.version}-n-orm-${project.parent.version}</version>
