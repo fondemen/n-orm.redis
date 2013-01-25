@@ -1,22 +1,14 @@
 package com.googlecode.n_orm.redis;
 
-import static org.junit.Assert.*;
-
-import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
-import com.googlecode.n_orm.storeapi.CloseableKeyIterator;
-import com.googlecode.n_orm.storeapi.Constraint;
 import com.googlecode.n_orm.storeapi.DefaultColumnFamilyData;
-import com.googlecode.n_orm.storeapi.Row;
 import com.googlecode.n_orm.storeapi.Row.ColumnFamilyData;
 
 

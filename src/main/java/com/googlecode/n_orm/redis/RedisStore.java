@@ -99,12 +99,6 @@ public class RedisStore implements SimpleStore {
 
 	/**
 	 * Default port is 6379 Default timeout is 2000
-	 * 
-	 * @param host
-	 * @param port
-	 * @param timeout
-	 * @param password
-	 * @return
 	 */
 	public static RedisStore getStore(String host, int port, int timeout,
 			String password) {
@@ -193,13 +187,6 @@ public class RedisStore implements SimpleStore {
 	/**
 	 * Get an iterator on a list of Row specified with a Constraint, and for a
 	 * list of families
-	 * 
-	 * @param table
-	 * @param c
-	 * @param limit
-	 * @param families
-	 * @return the iteator
-	 * @throws DatabaseNotReachedException
 	 */
 	@Override
 	public CloseableKeyIterator get(String table, Constraint c, int limit,
@@ -230,13 +217,6 @@ public class RedisStore implements SimpleStore {
 	/**
 	 * Get the value associated to the key, for the (table, id, family) n-uplet
 	 * returns the value or null if the value do not exist
-	 * 
-	 * @param table
-	 * @param id
-	 * @param family
-	 * @param key
-	 * @return
-	 * @throws DatabaseNotReachedException
 	 */
 	@Override
 	public byte[] get(String table, String id, String family, String key)
@@ -259,12 +239,6 @@ public class RedisStore implements SimpleStore {
 
 	/**
 	 * Get a Map of {key => value} for a specified id and a specified family
-	 * 
-	 * @param table
-	 * @param id
-	 * @param family
-	 * @return
-	 * @throws DatabaseNotReachedException
 	 */
 	@Override
 	public Map<String, byte[]> get(String table, String id, String family)
@@ -293,13 +267,6 @@ public class RedisStore implements SimpleStore {
 	/**
 	 * Get a specified row from a specified table and family with rows specified
 	 * with a Constraint
-	 * 
-	 * @param table
-	 * @param id
-	 * @param family
-	 * @param c
-	 * @return
-	 * @throws DatabaseNotReachedException
 	 */
 	@Override
 	public Map<String, byte[]> get(String table, String id, String family,
@@ -530,11 +497,6 @@ public class RedisStore implements SimpleStore {
 
 	/**
 	 * Return the number of the rows specified with a Constraint
-	 * 
-	 * @param table
-	 * @param c
-	 * @return
-	 * @throws DatabaseNotReachedException
 	 */
 	@Override
 	public long count(String table, Constraint c)
@@ -574,11 +536,6 @@ public class RedisStore implements SimpleStore {
 	}
 
 	/**
-	 * 
-	 * @param table
-	 * @param id
-	 * @param family
-	 * @param type
 	 * @return <table>
 	 *         :<id>:<column family>:vals -> hash de string -> string
 	 *         <table>
@@ -601,10 +558,6 @@ public class RedisStore implements SimpleStore {
 
 	/**
 	 * Return the rank of a id
-	 * 
-	 * @param table
-	 * @param id
-	 * @return
 	 */
 	public int idToRank(String table, String id, Boolean endSearch) {
 		return this.redisKeyToRank(this.getKey(table), id, endSearch);
@@ -613,10 +566,6 @@ public class RedisStore implements SimpleStore {
 	/**
 	 * Return the rank of a column synchro because of the add/remove dring the
 	 * search
-	 * 
-	 * @param table
-	 * @param id
-	 * @return
 	 */
 	public int columnToRank(String table, String id, String family, String key,
 			Boolean endSearch) {
@@ -633,7 +582,6 @@ public class RedisStore implements SimpleStore {
 	 *            : the id of the searchable element
 	 * @param endSearch
 	 *            : is it a start or a stop search
-	 * @return
 	 */
 	protected int redisKeyToRank(String hashKey, String id, Boolean endSearch) {
 
@@ -644,19 +592,22 @@ public class RedisStore implements SimpleStore {
 			return rank.intValue();
 		} else {
 			// the keys does not exist
-			Transaction t = this.getWritableRedis().multi();
-
-			// Add the key
-			t.zadd(hashKey, 0, id);
-
-			// get the rank of the freshly inserted id
-			Response<Long> rankR = t.zrank(hashKey, id);
-
-			// Remove the key
-			t.zrem(hashKey, id);
-
-			// Doing transaction
-			List<Object> res = t.exec();
+			Response<Long> rankR;
+			Jedis r = this.pool.getResource();
+			try {
+				rankR = tryKeyToRank(hashKey, id, r);
+				this.pool.returnResource(r);
+			} catch (RuntimeException x) {
+				this.pool.returnBrokenResource(r);
+				r = this.pool.getResource();
+				try {
+					rankR = tryKeyToRank(hashKey, id, r);
+					this.pool.returnResource(r);
+				} catch (RuntimeException y) {
+					this.pool.returnBrokenResource(r);
+					throw x;
+				}
+			}
 			rank = rankR.get();
 
 			// if the value do not already exists, remove 1 from the rank
@@ -667,6 +618,24 @@ public class RedisStore implements SimpleStore {
 			return rank.intValue();
 		}
 
+	}
+
+	private Response<Long> tryKeyToRank(String hashKey, String id, Jedis r) {
+		Transaction t = r.multi();
+
+		// Add the key
+		t.zadd(hashKey, 0, id);
+
+		// get the rank of the freshly inserted id
+		Response<Long> rankR = t.zrank(hashKey, id);
+
+		// Remove the key
+		t.zrem(hashKey, id);
+
+		// Doing transaction
+		t.exec();
+		
+		return rankR;
 	}
 
 	/**
