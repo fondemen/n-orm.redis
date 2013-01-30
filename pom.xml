@@ -9,7 +9,6 @@
 	<modelVersion>4.0.0</modelVersion>
 	<artifactId>redis</artifactId>
 	<name>Redis driver for n-orm</name>
-	<version>jedis-${jedis.version}-n-orm-${project.parent.version}</version>
 	<packaging>jar</packaging>
 
 	<scm>
@@ -20,7 +19,7 @@
 	
 	<properties>
               <commons-codec.version>1.4</commons-codec.version>
-              <jedis.version>2.0.0</jedis.version>
+              <jedis.version>2.1.0</jedis.version>
 	</properties>
 
 	<dependencies>
