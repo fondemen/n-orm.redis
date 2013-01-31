@@ -214,7 +214,7 @@ public class RedisStore implements SimpleStore {
 			Set<String> families2, int maxBulk, boolean excludeFirstElement) {
 		List<Row> result = new ArrayList<Row>(maxBulk);
 
-		int firstRank = startKey == null ? 0 : this.idToRank(table, startKey,
+		long firstRank = startKey == null ? 0 : this.idToRank(table, startKey,
 				false);
 		if (excludeFirstElement)
 			firstRank++;
@@ -288,12 +288,12 @@ public class RedisStore implements SimpleStore {
 	public Map<String, byte[]> get(String table, String id, String family,
 			Constraint c) throws DatabaseNotReachedException {
 		// la contrainte porte sur les clés dans la famille
-		int rangeMin = (c != null && c.getStartKey() != null) ? this
+		long rangeMin = (c != null && c.getStartKey() != null) ? this
 				.columnToRank(table, id, family, c.getStartKey(), false)
 				: DEFAULT_COLUMN_SCORE;
-		int rangeMax = (c != null && c.getEndKey() != null) ? this
+		long rangeMax = (c != null && c.getEndKey() != null) ? this
 				.columnToRank(table, id, family, c.getEndKey(), true)
-				: Integer.MAX_VALUE;
+				: Long.MAX_VALUE;
 
 		Set<String> keysS = this.getReadableRedis().zrange(
 				this.getKey(table, id, family, DataTypes.keys), rangeMin,
@@ -570,9 +570,9 @@ public class RedisStore implements SimpleStore {
 	public long count(String table, Constraint c)
 			throws DatabaseNotReachedException {
 
-		int rangeMin = (c != null && c.getStartKey() != null) ? this.idToRank(
+		long rangeMin = (c != null && c.getStartKey() != null) ? this.idToRank(
 				table, c.getStartKey(), false) : 0;
-		int rangeMax = (c != null && c.getEndKey() != null) ? this.idToRank(
+		long rangeMax = (c != null && c.getEndKey() != null) ? this.idToRank(
 				table, c.getEndKey(), false) : this.getReadableRedis()
 				.zcard(this.getKey(table)).intValue();
 
@@ -627,7 +627,7 @@ public class RedisStore implements SimpleStore {
 	/**
 	 * Return the rank of a id
 	 */
-	public int idToRank(String table, String id, Boolean endSearch) {
+	public long idToRank(String table, String id, Boolean endSearch) {
 		return this.redisKeyToRank(this.getKey(table), id, endSearch);
 	}
 
@@ -635,7 +635,7 @@ public class RedisStore implements SimpleStore {
 	 * Return the rank of a column synchro because of the add/remove dring the
 	 * search
 	 */
-	public int columnToRank(String table, String id, String family, String key,
+	public long columnToRank(String table, String id, String family, String key,
 			Boolean endSearch) {
 		return this.redisKeyToRank(
 				this.getKey(table, id, family, DataTypes.keys), key, endSearch);
@@ -651,13 +651,13 @@ public class RedisStore implements SimpleStore {
 	 * @param endSearch
 	 *            : is it a start or a stop search
 	 */
-	protected int redisKeyToRank(String hashKey, String id, Boolean endSearch) {
+	protected long redisKeyToRank(String hashKey, String id, Boolean endSearch) {
 
 		Long rank = this.getReadableRedis().zrank(hashKey, id);
 		// Remember if the key already exists
 		if (rank != null) {
 			// the key is existing, return the rank :
-			return rank.intValue();
+			return rank.longValue();
 		} else {
 			// the keys does not exist
 			Response<Long> rankR;
