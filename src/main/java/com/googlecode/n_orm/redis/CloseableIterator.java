@@ -78,7 +78,7 @@ final class CloseableIterator implements CloseableKeyIterator {
 		
 		List<Row> result;
 		int scanCaching = store.getScanCaching();
-		result = store.get(table, startKey, stopKey, families, scanCaching, (count != 0));
+		result = store.get(table, startKey, stopKey, families, scanCaching);
 		this.currentIterator = result.iterator();
 		int size = result.size();
 		
@@ -90,7 +90,7 @@ final class CloseableIterator implements CloseableKeyIterator {
 		
 		if(result.size() >= 1) {
 			// dernière clé
-			this.startKey = result.get(result.size()-1).getKey();
+			this.startKey = result.get(result.size()-1).getKey() + '\0';
 		}
 		
 	}

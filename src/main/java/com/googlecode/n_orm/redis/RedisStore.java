@@ -211,13 +211,11 @@ public class RedisStore implements SimpleStore {
 	}
 
 	public List<Row> get(String table, String startKey, String stopKey,
-			Set<String> families2, int maxBulk, boolean excludeFirstElement) {
+			Set<String> families2, int maxBulk) {
 		List<Row> result = new ArrayList<Row>(maxBulk);
 
 		long firstRank = startKey == null ? 0 : this.idToRank(table, startKey,
 				false);
-		if (excludeFirstElement)
-			firstRank++;
 
 		Set<String> redisKeys = this.getReadableRedis().zrange(
 				this.getKey(table), firstRank, firstRank + maxBulk);
@@ -410,93 +408,96 @@ public class RedisStore implements SimpleStore {
 			Map<String, Map<String, Number>> increments, Jedis r)
 
 	throws DatabaseNotReachedException {
+		List<Object> res;
 
-		String tableKey = this.getKey(table);
-		String famKey = this.getFamiliesKey(table);
-
-		Transaction t = r.multi();
-
-		// Add the key
-		t.zadd(tableKey, this.idToScore(id), id);
-		// t.sadd(famKey, "");
-
-		if (changed != null) {
-
-			// Add changed rows for each families
-			for (Map.Entry<String, Map<String, byte[]>> family : changed
-					.entrySet()) {
-				Map<String, String> dataToBeInserted = new HashMap<String, String>();
-
-				// Convert Map<String, byte[]> to Map<String, String> before
-				// inserting
-				for (Map.Entry<String, byte[]> key : family.getValue()
+		do {
+			String tableKey = this.getKey(table);
+			String famKey = this.getFamiliesKey(table);
+	
+			Transaction t = r.multi();
+	
+			// Add the key
+			t.zadd(tableKey, this.idToScore(id), id);
+			// t.sadd(famKey, "");
+	
+			if (changed != null) {
+	
+				// Add changed rows for each families
+				for (Map.Entry<String, Map<String, byte[]>> family : changed
 						.entrySet()) {
-					dataToBeInserted.put(key.getKey(),
-							this.encodeToRedis(key.getValue()));
-				}
-				// add the family in the set of family
-				t.sadd(famKey, family.getKey());
-
-				// add the set of keys
-				for (String redisKey : family.getValue().keySet()) {
-					t.zadd(this.getKey(table, id, family.getKey(),
-							DataTypes.keys), this.columnToScore(redisKey),
-							redisKey);
-				}
-
-				// add the { key => value } hashmap
-				t.hmset(this.getKey(table, id, family.getKey(), DataTypes.vals),
-						dataToBeInserted);
-
-			}
-		}
-
-		if (removed != null) {
-			// Remove the keys
-			for (Entry<String, Set<String>> family : removed.entrySet()) {
-				for (String redisKey : family.getValue()) {
-					// remove from the list of keys...
-					t.zrem(this.getKey(table, id, family.getKey(),
-							DataTypes.keys), redisKey);
-					// ... and from the hashmap
-					t.hdel(this.getKey(table, id, family.getKey(),
-							DataTypes.vals), redisKey);
-
-					// Useless for an increment cannot be removed (i.e. get
-					// null)
-					// t.hdel(
-					// this.getKey(table, id, family.getKey(),
-					// DataTypes.increments), redisKey);
+					Map<String, String> dataToBeInserted = new HashMap<String, String>();
+	
+					// Convert Map<String, byte[]> to Map<String, String> before
+					// inserting
+					for (Map.Entry<String, byte[]> key : family.getValue()
+							.entrySet()) {
+						dataToBeInserted.put(key.getKey(),
+								this.encodeToRedis(key.getValue()));
+					}
+					// add the family in the set of family
+					t.sadd(famKey, family.getKey());
+	
+					// add the set of keys
+					for (String redisKey : family.getValue().keySet()) {
+						t.zadd(this.getKey(table, id, family.getKey(),
+								DataTypes.keys), this.columnToScore(redisKey),
+								redisKey);
+					}
+	
+					// add the { key => value } hashmap
+					t.hmset(this.getKey(table, id, family.getKey(), DataTypes.vals),
+							dataToBeInserted);
+	
 				}
 			}
-		}
-
-		if (increments != null) {
-			// Increment the values
-			for (Map.Entry<String, Map<String, Number>> family : increments
-					.entrySet()) {
-
-				// if the family does not exist, create it
-				t.sadd(famKey, family.getKey());
-
-				// add the set of keys
-				for (String redisKey : family.getValue().keySet()) {
-					t.zadd(this.getKey(table, id, family.getKey(),
-							DataTypes.keys), this.columnToScore(redisKey),
-							redisKey);
+	
+			if (removed != null) {
+				// Remove the keys
+				for (Entry<String, Set<String>> family : removed.entrySet()) {
+					for (String redisKey : family.getValue()) {
+						// remove from the list of keys...
+						t.zrem(this.getKey(table, id, family.getKey(),
+								DataTypes.keys), redisKey);
+						// ... and from the hashmap
+						t.hdel(this.getKey(table, id, family.getKey(),
+								DataTypes.vals), redisKey);
+	
+						// Useless for an increment cannot be removed (i.e. get
+						// null)
+						// t.hdel(
+						// this.getKey(table, id, family.getKey(),
+						// DataTypes.increments), redisKey);
+					}
 				}
-
-				for (Entry<String, Number> familyKey : family.getValue()
+			}
+	
+			if (increments != null) {
+				// Increment the values
+				for (Map.Entry<String, Map<String, Number>> family : increments
 						.entrySet()) {
-					// Increment directly in the "increments" database
-					t.hincrBy(this.getKey(table, id, family.getKey(),
-							DataTypes.increments), familyKey.getKey(),
-							familyKey.getValue().longValue());
+	
+					// if the family does not exist, create it
+					t.sadd(famKey, family.getKey());
+	
+					// add the set of keys
+					for (String redisKey : family.getValue().keySet()) {
+						t.zadd(this.getKey(table, id, family.getKey(),
+								DataTypes.keys), this.columnToScore(redisKey),
+								redisKey);
+					}
+	
+					for (Entry<String, Number> familyKey : family.getValue()
+							.entrySet()) {
+						// Increment directly in the "increments" database
+						t.hincrBy(this.getKey(table, id, family.getKey(),
+								DataTypes.increments), familyKey.getKey(),
+								familyKey.getValue().longValue());
+					}
 				}
 			}
-		}
-
-		t.exec();
+	
+			res = t.exec();
+		} while(res == null);
 	}
 
 	/**
@@ -689,19 +690,24 @@ public class RedisStore implements SimpleStore {
 	}
 
 	private Response<Long> tryKeyToRank(String hashKey, String id, Jedis r) {
-		Transaction t = r.multi();
-
-		// Add the key
-		t.zadd(hashKey, 0, id);
-
-		// get the rank of the freshly inserted id
-		Response<Long> rankR = t.zrank(hashKey, id);
-
-		// Remove the key
-		t.zrem(hashKey, id);
-
-		// Doing transaction
-		t.exec();
+		List<Object> res;
+		Response<Long> rankR;
+		
+		do {
+			Transaction t = r.multi();
+	
+			// Add the key
+			t.zadd(hashKey, 0, id);
+	
+			// get the rank of the freshly inserted id
+			rankR = t.zrank(hashKey, id);
+	
+			// Remove the key
+			t.zrem(hashKey, id);
+	
+			// Doing transaction
+			res = t.exec();
+		} while (res == null);
 
 		return rankR;
 	}
