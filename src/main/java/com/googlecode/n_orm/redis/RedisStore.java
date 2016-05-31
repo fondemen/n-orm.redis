@@ -29,11 +29,11 @@ import com.googlecode.n_orm.storeapi.Row;
 import com.googlecode.n_orm.storeapi.Row.ColumnFamilyData;
 import com.googlecode.n_orm.storeapi.SimpleStore;
 
-// <table> -> liste ordonnée avec (poids-> id)
-// <table>:families -> un set de string
-// <table>:<id>:<column family>:keys -> un sorted set de string
-//<table>:<id>:<column family>:vals -> un hash de string -> string
-//<table>:<id>:<column family>:increments -> un hash de string -> string
+// [table] -> liste ordonnée avec (poids-> id)
+// [table]:families -> un set de string
+// [table]:[id]:[column family]:keys -> un sorted set de string
+// [table]:[id]:[column family]:vals -> un hash de string -> string
+// [table]:[id]:[column family]:increments -> un hash de string -> string
 
 public class RedisStore implements SimpleStore {
 	private static final String SEPARATOR = ":";
@@ -176,7 +176,7 @@ public class RedisStore implements SimpleStore {
 
 	/**
 	 * Test if an id exists in the table
-	 * <table>
+	 * [table]
 	 */
 	@Override
 	public boolean exists(String table, String id)
@@ -185,11 +185,8 @@ public class RedisStore implements SimpleStore {
 	}
 
 	/**
-	 * Test if a family exists for the element <id> in the table
-	 * <table>
-	 * (test if
-	 * <table>
-	 * :<id>:<family>:keys exist
+	 * Test if a family exists for the element [id] in the table
+	 * (test if [table]:[id]:[family]:keys exist
 	 */
 	@Override
 	public boolean exists(String table, String id, String family)
@@ -252,7 +249,7 @@ public class RedisStore implements SimpleStore {
 	}
 
 	/**
-	 * Get a Map of {key => value} for a specified id and a specified family
+	 * Get a Map of {key ={@literal >} value} for a specified id and a specified family
 	 */
 	@Override
 	public Map<String, byte[]> get(String table, String id, String family)
@@ -530,7 +527,7 @@ public class RedisStore implements SimpleStore {
 	private void tryDelete(String table, String id, Jedis r)
 			throws DatabaseNotReachedException {
 		// delete :
-		// - <table>
+		// - [table]
 
 		List<Object> res;
 
@@ -543,13 +540,13 @@ public class RedisStore implements SimpleStore {
 
 			Set<String> families = r.smembers(famKey);
 			for (String family : families) {
-				// - <table>:<id>:<column family>:keys
+				// - [table]:[id]:[column family]:keys
 				keysToBeDeleted.add(this.getKey(table, id, family,
 						DataTypes.keys));
-				// - <table>:<id>:<column family>:vals
+				// - [table]:[id]:[column family]:vals
 				keysToBeDeleted.add(this.getKey(table, id, family,
 						DataTypes.vals));
-				// - <table>:<id>:<column family>:increments
+				// - [table]:[id]:[column family]:increments
 				keysToBeDeleted.add(this.getKey(table, id, family,
 						DataTypes.increments));
 			}
@@ -588,7 +585,7 @@ public class RedisStore implements SimpleStore {
 	 * Return the redis keys for the elements'keys for the table
 	 * 
 	 * @param table
-	 * @return liste ordonnée avec (poids-> id)
+	 * @return ordered list according to (weigth-{@literal >} id)
 	 */
 	protected String getKey(String table) {
 		return table;
@@ -598,18 +595,15 @@ public class RedisStore implements SimpleStore {
 	 * Return the redis key for the list of families for the table
 	 * 
 	 * @param table
-	 * @return table:families -> un set de string
+	 * @return table:families -{@literal >} set of strings
 	 */
 	protected String getFamiliesKey(String table) {
 		return table + SEPARATOR + FAMILIES;
 	}
 
 	/**
-	 * @return <table>
-	 *         :<id>:<column family>:vals -> hash de string -> string
-	 *         <table>
-	 *         <table>
-	 *         :<id>:<column family>:keys -> un set de strings
+	 * @return [table]:[id]:[column family]:vals -{@literal >} hash of strings -{@literal >} string <br>
+	 *         [table]:[id]:[column family]:keys -{@literal >} set of strings
 	 */
 	protected String getKey(String table, String id, String family,
 			DataTypes type) {
