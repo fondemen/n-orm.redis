@@ -19,7 +19,7 @@
 	
 	<properties>
               <commons-codec.version>1.4</commons-codec.version>
-              <jedis.version>2.1.0</jedis.version>
+              <jedis.version>2.9.0</jedis.version>
 	</properties>
 
 	<dependencies>
