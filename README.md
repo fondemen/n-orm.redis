@@ -1,6 +1,6 @@
 # n-orm.redis
 
-Redis driver for [n-orm](https://github.com/fondemen/n-orm).
+Redis driver for [n-orm](https://github.com/fondemen/n-orm.core).
 
 # Introduction #
 
