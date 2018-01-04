@@ -6,7 +6,10 @@ Redis driver for [n-orm](https://github.com/fondemen/n-orm.core).
 
 [Redis](http://redis.io) is « an open source, advanced key-value store ».
 n-orm can use Redis for storing persisting objects.
+
 Javadoc is available [here](https://fondemen.github.io/n-orm.redis/redis/apidocs/)
+
+A sample project is available at [n-orm.sample](https://github.com/fondemen/n-orm.sample). Check the [POM for redis](https://github.com/fondemen/n-orm.sample/blob/master/example-redis-pom.xml), and the [store.properties](https://github.com/fondemen/n-orm.sample/blob/master/src/main/redis-resources/com/googlecode/n_orm/sample/businessmodel/store.properties) examples.
 
 # Details #
 
