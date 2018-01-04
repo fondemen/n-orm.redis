@@ -6,6 +6,7 @@ Redis driver for [n-orm](https://github.com/fondemen/n-orm.core).
 
 [Redis](http://redis.io) is « an open source, advanced key-value store ».
 n-orm can use Redis for storing persisting objects.
+Javadoc is available [here](https://fondemen.github.io/n-orm.redis/redis/apidocs/)
 
 # Details #
 
@@ -13,10 +14,10 @@ The Redis backend uses [Jedis](https://github.com/xetorthio/jedis), one of the r
 
 It currently supports Redis in a single-master server mode.
 
-## [SimpleStore](https://fondemen.github.io/n-orm/storage/apidocs/index.html?com/googlecode/n_orm/storeapi/SimpleStore.html) interface ##
-The Redis backend implements the [SimpleStore interface](https://fondemen.github.io/n-orm/storage/apidocs/index.html?com/googlecode/n_orm/storeapi/SimpleStore.html).
+## [SimpleStore](https://fondemen.github.io/n-orm.core/storage/apidocs/index.html?com/googlecode/n_orm/storeapi/SimpleStore.html) interface ##
+The [Redis backend](https://fondemen.github.io/n-orm.redis/redis/apidocs/index.html?com/googlecode/n_orm/redis/RedisStore.html) implements the [SimpleStore interface](https://fondemen.github.io/n-orm.core/storage/apidocs/index.html?com/googlecode/n_orm/storeapi/SimpleStore.html).
 
-This means that it will be wrapped by [SimpleStoreWrapper](https://fondemen.github.io/n-orm/storage/apidocs/index.html?com/googlecode/n_orm/storeapi/SimpleStoreWrapper.html) to serve as a data store.
+This means that it will be wrapped by [SimpleStoreWrapper](https://fondemen.github.io/n-orm.core/storage/apidocs/index.html?com/googlecode/n_orm/storeapi/SimpleStoreWrapper.html) to serve as a data store.
 
 ## Data model in Redis ##
 
@@ -27,7 +28,7 @@ Unlike HBase, Redis is not column-oriented, though it can store only different f
   * [sets](http://redis.io/topics/data-types#sets),
   * and [sorted sets](http://redis.io/topics/data-types#sorted-sets).
 
-Because of these limitations, a n-orm [persisting object](https://fondemen.github.io/n-orm/storage/apidocs/index.html?com/googlecode/n_orm/PersistingElement.html) is stored in Redis across multiple keys and values.
+Because of these limitations, a n-orm [persisting object](https://fondemen.github.io/n-orm.core/storage/apidocs/index.html?com/googlecode/n_orm/PersistingElement.html) is stored in Redis across multiple keys and values.
 
 ### Structure of a row ###
 In n-orm, each object is defined by :
@@ -50,8 +51,8 @@ The data is stored in Base64 for the values, and in plain number for the increme
 The Base64 has been selected for preventing errors in saving bytes array from java (the conversion to/from Base64 is made in the RedisStore).
 However, Redis supports natively an increment command, so the data is stored in plain number for this type of data.
 
-## Search with [Constraints](https://fondemen.github.io/n-orm/storage/apidocs/index.html?com/googlecode/n_orm/storeapi/Constraint.html) ##
-n-orm use the [Constraint](https://fondemen.github.io/n-orm/storage/apidocs/index.html?com/googlecode/n_orm/storeapi/Constraint.html) class for searching elements or keys.
+## Search with [Constraints](https://fondemen.github.io/n-orm.core/storage/apidocs/index.html?com/googlecode/n_orm/storeapi/Constraint.html) ##
+n-orm use the [Constraint](https://fondemen.github.io/n-orm.core/storage/apidocs/index.html?com/googlecode/n_orm/storeapi/Constraint.html) class for searching elements or keys.
 A Constraint is build with a _startKey_ and a _stopKey_ , which can be null, and can impose a limit of number of results.
 
 Redis does not support search in a Sorted Set, but can return position for an element of the SortedSet.
