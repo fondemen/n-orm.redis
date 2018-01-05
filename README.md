@@ -1,5 +1,8 @@
 # n-orm.redis
 
+[![Build Status](https://travis-ci.org/fondemen/n-orm.redis.svg?branch=master)](https://travis-ci.org/fondemen/n-orm.redis)
+[![codecov](https://codecov.io/gh/fondemen/n-orm.redis/branch/master/graph/badge.svg)](https://codecov.io/gh/fondemen/n-orm.redis)
+
 Redis driver for [n-orm](https://github.com/fondemen/n-orm.core).
 
 # Introduction #
